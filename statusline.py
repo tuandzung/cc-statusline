@@ -33,7 +33,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
-__version__ = "1.1.0"
+__version__ = "1.1.3"
 
 # ── Catppuccin Macchiato palette (24-bit RGB) ─────────────────────────────────
 _P: dict[str, tuple[int, int, int]] = {
