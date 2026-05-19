@@ -692,7 +692,7 @@ def _seg_metrics(data: dict) -> Segment:
     removed = cost.get("total_lines_removed") or 0
     dur_str = _fmt_duration(dur_ms / 1000)
     return Segment(
-        f"{ICON_TIMER} {dur_str}  {ICON_ADD} +{added}  {ICON_DEL} -{removed}",
+        f"{ICON_TIMER} {dur_str}  {ICON_ADD} {added}  {ICON_DEL} {removed}",
         "teal",
     )
 

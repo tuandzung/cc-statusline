@@ -1,6 +1,6 @@
 {
   "name": "cc-statusline",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "3-line Powerline statusline for Claude Code — Catppuccin Macchiato, Nerd Font icons, plan quota tracking",
   "author": {
     "name": "Ngo Tuan Dzung"
