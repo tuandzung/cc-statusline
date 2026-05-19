@@ -5,7 +5,7 @@
   "author": {
     "name": "Ngo Tuan Dzung"
   },
-  "repository": "https://github.com/dungnt/cc-statusline",
+  "repository": "https://github.com/tuandzung/cc-statusline",
   "license": "MIT",
   "keywords": ["statusline", "powerline", "catppuccin", "claude-code", "nerd-fonts"]
 }
