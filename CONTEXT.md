@@ -22,32 +22,49 @@ A named Catppuccin Macchiato colour (e.g. `base`, `crust`, `mauve`, `sapphire`).
 
 ### Usage tracking
 
-**Prompt**:
-One external user message in a JSONL transcript that is neither a slash-command output (`<command-name>`) nor a meta message. The unit Anthropic rate-limits on per 5h window.
+Two data sources, ordered by priority:
+
+1. **Quota snapshot** (preferred) — Anthropic's authoritative `utilization` returned by `GET /api/oauth/usage`. Requires **OAuth credentials**.
+2. **JSONL-derived stats** (fallback) — local heuristic over **JSONL transcripts**. Used when OAuth credentials absent or `/api/oauth/usage` unreachable.
+
+**Quota snapshot**:
+A point-in-time response from `https://api.anthropic.com/api/oauth/usage`. Map keyed by quota axis (`five_hour`, `seven_day`, `seven_day_sonnet`, `monthly_limit`, `extra_usage`). Each entry: `{utilization: 0..1, resets_at: RFC3339, is_enabled: bool}`. `utilization` is the **Authoritative %** — denominator is Anthropic's own enforced cap.
+_Avoid_: usage response, anthropic API.
+
+**OAuth credentials**:
+The `{accessToken, refreshToken, expiresAt}` pair Claude Code stores. Located in macOS Keychain (`Claude Code-credentials`), Linux libsecret (`secret-tool service=Claude Code-credentials`), or `~/.claude/.credentials.json` (`claudeAiOauth` field). Read-only from cc-statusline's perspective in the current design.
+_Avoid_: token, API key.
+
+**Authoritative %**:
+Anthropic-returned `utilization` × 100 for a given quota axis. Distinct from the **Limit basis %** used in the fallback path.
+_Avoid_: real %, true %.
+
+**Prompt** _(fallback path only)_:
+One external user message in a JSONL transcript that is neither a slash-command output (`<command-name>`) nor a meta message. Used as the fallback denominator unit when **Quota snapshot** unavailable.
 _Avoid_: message, query, request.
 
-**5h cycle / 5h block**:
-A rolling 5-hour window anchored to the earliest **Prompt** still inside it. Matches Anthropic's actual reset behaviour, not a fixed grid.
+**5h cycle / 5h block** _(fallback path only)_:
+A rolling 5-hour window anchored to the earliest **Prompt** still inside it. In the OAuth path, replaced by `five_hour` quota with its own `resets_at`.
 _Avoid_: session, block, period.
 
-**Weekly window**:
-The rolling 7-day window ending now. Sums **Model-hours** across all **JSONL transcripts** whose **Prompts** fall inside it.
+**Weekly window** _(fallback path only)_:
+The rolling 7-day window ending now. In the OAuth path, replaced by `seven_day` + `seven_day_sonnet` quotas with their own `resets_at`.
 _Avoid_: week, billing week.
 
-**Model-hour**:
-A unit of weekly usage. Computed per JSONL transcript as `(session_last_ts − session_first_ts) × (responses_for_model / total_responses)`. Summed per model (Sonnet / Opus) across the **Weekly window**.
+**Model-hour** _(fallback path only)_:
+Per-JSONL `wall_time × (responses_for_model / total_responses)`, summed per model across the **Weekly window**. Has no OAuth equivalent — Anthropic exposes utilization, not hours.
 _Avoid_: hour, conversation hour.
 
 **JSONL transcript**:
-A `~/.claude/projects/<project>/<session>.jsonl` file containing one Claude Code session's full message stream. The sole authoritative source for **Prompt** counts and **Model-hour** computation.
+A `~/.claude/projects/<project>/<session>.jsonl` file containing one Claude Code session's full message stream. Authoritative source for the **fallback path** only.
 _Avoid_: log, history, conversation file.
 
-**Tier**:
-The user's Claude plan, selected via `CC_PLAN_TIER` env var. One of `free`, `pro`, `max_5x`, `max_20x`, `team_standard`, `team_premium`. Maps to a `limits.json` entry with `5h_cycle.{min,max}`, `weekly_sonnet.{min,max}`, and optionally `weekly_opus.{min,max}`.
+**Tier** _(fallback path only)_:
+The user's Claude plan, selected via `CC_PLAN_TIER` env var. One of `free`, `pro`, `max_5x`, `max_20x`, `team_standard`, `team_premium`. Maps to a `limits.json` entry. Unused in OAuth path since Anthropic returns utilization against its own cap.
 _Avoid_: plan, subscription level.
 
-**Limit basis**:
-The `min` side of each tier range. The statusline uses `min` as denominator for `%` to stay conservative — the user is warned before Anthropic's actual cap kicks in.
+**Limit basis** _(fallback path only)_:
+The `min` side of each tier range, used as fallback denominator. Distinct from **Authoritative %**.
 _Avoid_: cap, quota.
 
 ### Plugin shape

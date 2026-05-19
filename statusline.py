@@ -3,10 +3,19 @@
 
 Line 1: [VIM mode]  [CWD]  [Git branch/ahead/behind/dirty]  [Session metrics]
 Line 2: [Model]  [Context %]
-Line 3: [5h block %]  [Weekly Sonnet/Opus %]
+Line 3: [5h block %]  [Weekly %]
+
+Line 3 has two data sources, in priority order:
+  1. OAuth path  — Anthropic /api/oauth/usage (authoritative utilization).
+                   Enabled when ~/.claude/.credentials.json contains a
+                   claudeAiOauth.accessToken. Read-only; never refreshes.
+  2. JSONL path  — local model-hour heuristic over ~/.claude/projects/*.jsonl,
+                   denominated against CC_PLAN_TIER. Used when (1) is unavailable.
 
 Config:
-  CC_PLAN_TIER   one of free|pro|max_5x|max_20x|team_standard|team_premium (default: pro)
+  CC_PLAN_TIER         free|pro|max_5x|max_20x|team_standard|team_premium (default: pro)
+  CC_STATUSLINE_DEBUG  set to "1" to log OAuth path decisions to
+                       ~/.cache/cc-statusline/debug.log
 
 Requires: Python 3.10+, Nerd Font v3 patched terminal font, 24-bit colour terminal.
 """
@@ -18,9 +27,13 @@ import re
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
+
+__version__ = "1.1.0"
 
 # ── Catppuccin Macchiato palette (24-bit RGB) ─────────────────────────────────
 _P: dict[str, tuple[int, int, int]] = {
@@ -62,7 +75,8 @@ ICON_ADD     = ""      # nf-oct-diff_added
 ICON_DEL     = ""      # nf-oct-diff_removed
 ICON_MODEL   = ""      # nf-fa-robot
 ICON_BRAIN   = "\U000f068b"  # nf-md-brain          (U+F068B)
-ICON_BLOCK   = "\U000f03bc"  # nf-md-hourglass_empty (U+F03BC)
+ICON_BLOCK   = "\U000f03bc"  # nf-md-hourglass_empty (U+F03BC) — JSONL fallback
+ICON_BLOCK_LIVE = "\U000f0e89"  # nf-md-hourglass_full  (U+F0E89) — OAuth authoritative
 ICON_WEEKLY  = ""      # nf-fa-calendar
 
 # Powerline right-filled separator (U+E0B0)
@@ -412,6 +426,220 @@ def _get_usage_stats() -> Optional[dict]:
         return None
 
 
+# ── OAuth quota path ──────────────────────────────────────────────────────────
+#
+# Reads Claude Code's own OAuth access token from ~/.claude/.credentials.json
+# and calls Anthropic's authoritative /api/oauth/usage endpoint. Strictly
+# read-only: never refreshes, never writes back, never touches keychains.
+# Falls back to the JSONL path on any failure (missing creds, expired token,
+# 401/403/429, network error, parse error).
+#
+# See docs/adr/0004-oauth-quota-source-read-only.md for the design rationale.
+
+_OAUTH_URL          = "https://api.anthropic.com/api/oauth/usage"
+_OAUTH_CREDS_PATH   = Path.home() / ".claude" / ".credentials.json"
+_OAUTH_SNAPSHOT     = _CACHE_DIR / "oauth_snapshot.json"
+_OAUTH_STATE        = _CACHE_DIR / "oauth_state.json"
+_OAUTH_CACHE_TTL    = 300     # 5 min — render stale snapshot before refetching
+_OAUTH_STALE_WINDOW = 1800    # 30 min — beyond this, fall back to JSONL
+_OAUTH_429_COOLDOWN = 900     # 15 min — back off after rate limit
+_OAUTH_TIMEOUT      = 1.5     # seconds — cap render-path latency
+_OAUTH_AXES         = ("five_hour", "seven_day", "seven_day_sonnet")
+_USER_AGENT         = f"cc-statusline/{__version__} (+https://github.com/tuandzung/cc-statusline)"
+
+_DEBUG_ENABLED = os.environ.get("CC_STATUSLINE_DEBUG") == "1"
+_DEBUG_LOG     = Path.home() / ".cache" / "cc-statusline" / "debug.log"
+
+
+def _dlog(msg: str) -> None:
+    if not _DEBUG_ENABLED:
+        return
+    try:
+        _DEBUG_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with open(_DEBUG_LOG, "a", encoding="utf-8") as fh:
+            fh.write(f"{datetime.now().isoformat(timespec='seconds')} {msg}\n")
+    except Exception:
+        pass
+
+
+def _read_oauth_credentials() -> Optional[dict]:
+    """Return {access, expires_at} from ~/.claude/.credentials.json or None.
+
+    expires_at is unix seconds; may be None if the file omits it.
+    """
+    if not _OAUTH_CREDS_PATH.exists():
+        return None
+    try:
+        data = json.loads(_OAUTH_CREDS_PATH.read_text())
+    except Exception:
+        return None
+    oauth = data.get("claudeAiOauth") if isinstance(data, dict) else None
+    if not isinstance(oauth, dict):
+        return None
+    access = oauth.get("accessToken")
+    if not isinstance(access, str) or not access:
+        return None
+    exp_ms = oauth.get("expiresAt")
+    expires_at: Optional[float] = None
+    if isinstance(exp_ms, (int, float)) and exp_ms > 0:
+        expires_at = float(exp_ms) / 1000.0
+    return {"access": access, "expires_at": expires_at}
+
+
+def _fetch_oauth_usage(access_token: str) -> tuple[str, Optional[dict]]:
+    """Call /api/oauth/usage. Return (status, body).
+
+    status ∈ {"ok", "rate_limited", "auth_error", "server_error", "network_error"}.
+    body is the parsed JSON on "ok", else None.
+    """
+    req = urllib.request.Request(
+        _OAUTH_URL,
+        headers={
+            "Authorization":  f"Bearer {access_token}",
+            "Content-Type":   "application/json",
+            "anthropic-beta": "oauth-2025-04-20",
+            "User-Agent":     _USER_AGENT,
+            "Accept":         "application/json",
+        },
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=_OAUTH_TIMEOUT) as resp:
+            raw = resp.read(65536)
+        body = json.loads(raw)
+        if not isinstance(body, dict):
+            return "network_error", None
+        return "ok", body
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            return "rate_limited", None
+        if e.code in (401, 403):
+            return "auth_error", None
+        if 500 <= e.code < 600:
+            return "server_error", None
+        return "network_error", None
+    except Exception:
+        return "network_error", None
+
+
+def _parse_resets_at(value) -> Optional[float]:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except Exception:
+        return None
+
+
+def _normalize_oauth_response(body: dict, now: float) -> Optional[dict]:
+    """Pick the axes we render, drop disabled/null/unknown ones."""
+    axes: dict[str, dict] = {}
+    for key in _OAUTH_AXES:
+        entry = body.get(key)
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("is_enabled") is False:
+            continue
+        util = entry.get("utilization")
+        if not isinstance(util, (int, float)):
+            continue
+        axes[key] = {
+            "utilization": float(util),
+            "resets_at":   _parse_resets_at(entry.get("resets_at")),
+        }
+    if not axes:
+        return None
+    return {"fetched_at": now, "axes": axes}
+
+
+def _load_json(path: Path) -> Optional[dict]:
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return None
+
+
+def _save_json(path: Path, data: dict) -> None:
+    try:
+        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data))
+    except Exception:
+        pass
+
+
+def _snapshot_reset_passed(snapshot: dict, now: float) -> bool:
+    for ax in snapshot.get("axes", {}).values():
+        ra = ax.get("resets_at")
+        if isinstance(ra, (int, float)) and ra < now:
+            return True
+    return False
+
+
+def _get_oauth_stats() -> Optional[dict]:
+    """Return a fresh-or-stale-within-window OAuth snapshot, or None to fall back.
+
+    State machine:
+      - No creds              → None
+      - Token clearly expired → reuse snapshot if young, else None
+      - Cache < 5 min old     → reuse snapshot
+      - 30 min ≥ age ≥ 5 min  → refetch (unless 429-cooldown); reuse on failure if not over-stale
+      - Age > 30 min          → refetch; fall back if refetch fails
+      - Any quota's resets_at already passed → force refetch (cooldown bypassed once)
+      - 429                   → mark cooldown 15 min, reuse snapshot if fresh-enough
+    """
+    now = time.time()
+
+    creds = _read_oauth_credentials()
+    if not creds:
+        _dlog("oauth: no credentials, falling back")
+        return None
+
+    snapshot = _load_json(_OAUTH_SNAPSHOT)
+    state    = _load_json(_OAUTH_STATE) or {}
+    blocked_until = state.get("blocked_until", 0)
+
+    snap_age = float("inf")
+    if snapshot and isinstance(snapshot.get("fetched_at"), (int, float)):
+        snap_age = now - snapshot["fetched_at"]
+
+    reset_passed = bool(snapshot) and _snapshot_reset_passed(snapshot, now)
+
+    # If access token already expired, don't bother fetching — would 401.
+    token_expired = (
+        creds["expires_at"] is not None and creds["expires_at"] < now
+    )
+    if token_expired:
+        _dlog("oauth: token expired, skipping fetch")
+        if snapshot and snap_age < _OAUTH_STALE_WINDOW and not reset_passed:
+            return snapshot
+        return None
+
+    must_fetch       = snap_age >= _OAUTH_CACHE_TTL or reset_passed
+    cooldown_active  = now < blocked_until
+    fetch_allowed    = must_fetch and (not cooldown_active or reset_passed)
+
+    if fetch_allowed:
+        status, body = _fetch_oauth_usage(creds["access"])
+        if status == "ok" and body is not None:
+            new_snap = _normalize_oauth_response(body, now)
+            if new_snap:
+                _save_json(_OAUTH_SNAPSHOT, new_snap)
+                _save_json(_OAUTH_STATE, {"blocked_until": 0})
+                _dlog(f"oauth: fetched ok ({list(new_snap['axes'])})")
+                return new_snap
+            _dlog("oauth: response normalized to empty, falling back")
+        elif status == "rate_limited":
+            _save_json(_OAUTH_STATE, {"blocked_until": now + _OAUTH_429_COOLDOWN})
+            _dlog("oauth: 429 received, cooldown 15m")
+        else:
+            _dlog(f"oauth: fetch status={status}")
+
+    # Fall back to stale snapshot if within window and reset hasn't passed.
+    if snapshot and snap_age < _OAUTH_STALE_WINDOW and not reset_passed:
+        return snapshot
+    return None
+
+
 # ── Tier limits ───────────────────────────────────────────────────────────────
 
 _EMBEDDED_LIMITS: dict[str, dict] = {
@@ -536,6 +764,60 @@ def _seg_weekly(stats: Optional[dict], tier: dict) -> Segment:
     return Segment(text, _pct_color(s_pct))
 
 
+def _oauth_axis_pct(snapshot: dict, key: str) -> Optional[int]:
+    """Return integer % for a given axis, or None if absent.
+
+    Anthropic's `utilization` field is a 0..100 percentage in observed responses;
+    a value <= 1.0 is treated as a 0..1 fraction defensively.
+    """
+    ax = snapshot.get("axes", {}).get(key)
+    if not ax:
+        return None
+    util = ax.get("utilization")
+    if not isinstance(util, (int, float)):
+        return None
+    if util <= 1.0:
+        util *= 100
+    return min(100, max(0, round(util)))
+
+
+def _seg_block5h_oauth(snapshot: dict) -> Segment:
+    pct = _oauth_axis_pct(snapshot, "five_hour")
+    if pct is None:
+        return Segment(f"{ICON_BLOCK_LIVE} —", "surface2")
+    resets = snapshot.get("axes", {}).get("five_hour", {}).get("resets_at")
+    remain = max(0.0, resets - time.time()) if isinstance(resets, (int, float)) else 0
+    return Segment(
+        f"{ICON_BLOCK_LIVE} {pct}% ({_fmt_duration(remain)})",
+        _pct_color(pct),
+    )
+
+
+def _seg_weekly_oauth(snapshot: dict) -> Segment:
+    s_pct = _oauth_axis_pct(snapshot, "seven_day_sonnet")
+    a_pct = _oauth_axis_pct(snapshot, "seven_day")
+    if s_pct is None and a_pct is None:
+        return Segment(f"{ICON_WEEKLY} —", "surface2")
+
+    # Anchor "time remaining" to seven_day (all-model), falling back to sonnet.
+    axes   = snapshot.get("axes", {})
+    resets = (
+        axes.get("seven_day", {}).get("resets_at")
+        or axes.get("seven_day_sonnet", {}).get("resets_at")
+    )
+    remain = max(0.0, resets - time.time()) if isinstance(resets, (int, float)) else 0
+
+    parts = []
+    if s_pct is not None:
+        parts.append(f"{s_pct}% S")
+    if a_pct is not None:
+        parts.append(f"{a_pct}% A")
+    text = f"{ICON_WEEKLY} {'  '.join(parts)} ({_fmt_duration(remain)})"
+
+    worst = max(p for p in (s_pct, a_pct) if p is not None)
+    return Segment(text, _pct_color(worst))
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -546,9 +828,6 @@ def main() -> None:
             data = json.loads(raw)
     except Exception:
         pass
-
-    tier  = _tier_limits()
-    stats = _get_usage_stats()
 
     # Line 1: vim (optional) → cwd → git (optional) → metrics
     segs1: list[Segment] = []
@@ -564,8 +843,18 @@ def main() -> None:
     # Line 2: model → context
     segs2: list[Segment] = [_seg_model(data), _seg_context(data)]
 
-    # Line 3: 5h block → weekly
-    segs3: list[Segment] = [_seg_block5h(stats, tier), _seg_weekly(stats, tier)]
+    # Line 3: prefer Anthropic-authoritative OAuth snapshot when available,
+    # else fall back to the JSONL-derived model-hour heuristic.
+    oauth_snap = _get_oauth_stats()
+    if oauth_snap:
+        segs3: list[Segment] = [
+            _seg_block5h_oauth(oauth_snap),
+            _seg_weekly_oauth(oauth_snap),
+        ]
+    else:
+        tier  = _tier_limits()
+        stats = _get_usage_stats()
+        segs3 = [_seg_block5h(stats, tier), _seg_weekly(stats, tier)]
 
     print(render_line(segs1))
     print(render_line(segs2))
