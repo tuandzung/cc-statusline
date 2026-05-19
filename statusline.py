@@ -231,19 +231,30 @@ _AGG_TTL = 30  # seconds between full re-scans
 # handles parent-mkdir, JSON parse, atomic write, and silent failure.
 
 def _cache_load(path: Path) -> Optional[dict]:
+    if not path.is_relative_to(_CACHE_DIR):
+        _dlog(f"cache: refusing load outside _CACHE_DIR: {path}")
+        return None
     try:
         return json.loads(path.read_text())
-    except Exception:
+    except Exception as e:
+        _dlog(f"cache: load failed {path}: {e}")
         return None
 
 def _cache_save(path: Path, data: dict) -> None:
+    if not path.is_relative_to(_CACHE_DIR):
+        _dlog(f"cache: refusing save outside _CACHE_DIR: {path}")
+        return
     tmp = path.parent / f".{path.name}.tmp.{os.getpid()}"
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp.write_text(json.dumps(data))
         os.replace(tmp, path)
-    except Exception:
-        pass
+    except Exception as e:
+        _dlog(f"cache: save failed {path}: {e}")
+        try:
+            tmp.unlink()
+        except Exception:
+            pass
 
 def _session_cache_path(jsonl: Path) -> Path:
     h = hashlib.md5(str(jsonl).encode(), usedforsecurity=False).hexdigest()
