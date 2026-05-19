@@ -1,0 +1,11 @@
+{
+  "name": "cc-statusline",
+  "version": "1.0.0",
+  "description": "3-line Powerline statusline for Claude Code — Catppuccin Macchiato, Nerd Font icons, plan quota tracking",
+  "author": {
+    "name": "Ngo Tuan Dzung"
+  },
+  "repository": "https://github.com/dungnt/cc-statusline",
+  "license": "MIT",
+  "keywords": ["statusline", "powerline", "catppuccin", "claude-code", "nerd-fonts"]
+}

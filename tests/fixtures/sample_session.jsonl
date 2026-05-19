@@ -1,0 +1,6 @@
+{"type":"user","message":{"role":"user","content":"hello"},"timestamp":"2026-05-19T08:00:00.000Z","userType":"external","isMeta":false}
+{"type":"assistant","message":{"role":"assistant","content":"Hi!","model":"claude-sonnet-4-6-20241022"},"timestamp":"2026-05-19T08:00:05.000Z"}
+{"type":"user","message":{"role":"user","content":"what time is it"},"timestamp":"2026-05-19T08:10:00.000Z","userType":"external","isMeta":false}
+{"type":"assistant","message":{"role":"assistant","content":"It is 8:10.","model":"claude-sonnet-4-6-20241022"},"timestamp":"2026-05-19T08:10:03.000Z"}
+{"type":"user","message":{"role":"user","content":"<command-name>model</command-name>"},"timestamp":"2026-05-19T08:11:00.000Z","userType":"external","isMeta":false}
+{"type":"assistant","message":{"role":"assistant","content":"Done.","model":"claude-opus-4-7-20250115"},"timestamp":"2026-05-19T08:11:01.000Z"}
