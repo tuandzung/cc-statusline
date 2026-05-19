@@ -225,6 +225,26 @@ _AGG_CACHE = _CACHE_DIR / "aggregate.json"
 _SES_DIR = _CACHE_DIR / "sessions"
 _AGG_TTL = 30  # seconds between full re-scans
 
+# ── Cache IO substrate ────────────────────────────────────────────────────────
+# Single owner of read/write/swallow for every JSON file under _CACHE_DIR.
+# TTL / mtime / stale-window semantics stay caller-side; this layer only
+# handles parent-mkdir, JSON parse, atomic write, and silent failure.
+
+def _cache_load(path: Path) -> Optional[dict]:
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return None
+
+def _cache_save(path: Path, data: dict) -> None:
+    tmp = path.parent / f".{path.name}.tmp.{os.getpid()}"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(json.dumps(data))
+        os.replace(tmp, path)
+    except Exception:
+        pass
+
 def _session_cache_path(jsonl: Path) -> Path:
     h = hashlib.md5(str(jsonl).encode(), usedforsecurity=False).hexdigest()
     return _SES_DIR / f"{h}.json"
@@ -299,22 +319,13 @@ def _parse_jsonl(path: Path) -> Optional[dict]:
     }
 
 def _cached_session(jsonl: Path, mtime: float) -> Optional[dict]:
-    try:
-        cp = _session_cache_path(jsonl)
-        if cp.exists():
-            d = json.loads(cp.read_text())
-            if d.get("mtime") == mtime:
-                return d
-    except Exception:
-        pass
+    d = _cache_load(_session_cache_path(jsonl))
+    if d and d.get("mtime") == mtime:
+        return d
     return None
 
 def _save_session(jsonl: Path, mtime: float, info: dict) -> None:
-    try:
-        _SES_DIR.mkdir(parents=True, exist_ok=True)
-        _session_cache_path(jsonl).write_text(json.dumps({**info, "mtime": mtime}))
-    except Exception:
-        pass
+    _cache_save(_session_cache_path(jsonl), {**info, "mtime": mtime})
 
 def _load_sessions() -> list[dict]:
     projects = Path.home() / ".claude" / "projects"
@@ -387,20 +398,15 @@ def _compute_stats(sessions: list[dict], now: float) -> dict:
 def _get_usage_stats() -> Optional[dict]:
     """Return aggregate stats from cache or freshly computed."""
     now = time.time()
-    try:
-        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        if _AGG_CACHE.exists():
-            agg = json.loads(_AGG_CACHE.read_text())
-            if now - agg.get("computed_at", 0) < _AGG_TTL:
-                return agg
-    except Exception:
-        pass
+    agg = _cache_load(_AGG_CACHE)
+    if agg and now - agg.get("computed_at", 0) < _AGG_TTL:
+        return agg
 
     try:
         sessions = _load_sessions()
         stats = _compute_stats(sessions, now)
         stats["computed_at"] = now
-        _AGG_CACHE.write_text(json.dumps(stats))
+        _cache_save(_AGG_CACHE, stats)
         return stats
     except Exception:
         return None
@@ -527,19 +533,6 @@ def _normalize_oauth_response(body: dict, now: float) -> Optional[dict]:
         return None
     return {"fetched_at": now, "axes": axes}
 
-def _load_json(path: Path) -> Optional[dict]:
-    try:
-        return json.loads(path.read_text())
-    except Exception:
-        return None
-
-def _save_json(path: Path, data: dict) -> None:
-    try:
-        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(data))
-    except Exception:
-        pass
-
 def _snapshot_reset_passed(snapshot: dict, now: float) -> bool:
     for ax in snapshot.get("axes", {}).values():
         ra = ax.get("resets_at")
@@ -566,8 +559,8 @@ def _get_oauth_stats() -> Optional[dict]:
         _dlog("oauth: no credentials, falling back")
         return None
 
-    snapshot = _load_json(_OAUTH_SNAPSHOT)
-    state = _load_json(_OAUTH_STATE) or {}
+    snapshot = _cache_load(_OAUTH_SNAPSHOT)
+    state = _cache_load(_OAUTH_STATE) or {}
     blocked_until = state.get("blocked_until", 0)
 
     snap_age = float("inf")
@@ -593,13 +586,13 @@ def _get_oauth_stats() -> Optional[dict]:
         if status == "ok" and body is not None:
             new_snap = _normalize_oauth_response(body, now)
             if new_snap:
-                _save_json(_OAUTH_SNAPSHOT, new_snap)
-                _save_json(_OAUTH_STATE, {"blocked_until": 0})
+                _cache_save(_OAUTH_SNAPSHOT, new_snap)
+                _cache_save(_OAUTH_STATE, {"blocked_until": 0})
                 _dlog(f"oauth: fetched ok ({list(new_snap['axes'])})")
                 return new_snap
             _dlog("oauth: response normalized to empty, falling back")
         elif status == "rate_limited":
-            _save_json(_OAUTH_STATE, {"blocked_until": now + _OAUTH_429_COOLDOWN})
+            _cache_save(_OAUTH_STATE, {"blocked_until": now + _OAUTH_429_COOLDOWN})
             _dlog("oauth: 429 received, cooldown 15m")
         else:
             _dlog(f"oauth: fetch status={status}")
