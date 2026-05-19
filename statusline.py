@@ -38,64 +38,63 @@ __version__ = "1.1.0"
 # ── Catppuccin Macchiato palette (24-bit RGB) ─────────────────────────────────
 _P: dict[str, tuple[int, int, int]] = {
     "rosewater": (244, 219, 214),
-    "flamingo":  (240, 198, 198),
-    "pink":      (245, 189, 230),
-    "mauve":     (198, 160, 246),
-    "red":       (237, 135, 150),
-    "maroon":    (238, 153, 160),
-    "peach":     (245, 169, 127),
-    "yellow":    (238, 212, 159),
-    "green":     (166, 218, 149),
-    "teal":      (139, 213, 202),
-    "sky":       (145, 215, 227),
-    "sapphire":  (125, 196, 228),
-    "blue":      (138, 173, 244),
-    "lavender":  (183, 189, 248),
-    "text":      (202, 211, 245),
-    "subtext1":  (184, 192, 224),
-    "overlay2":  (147, 154, 183),
-    "overlay1":  (128, 135, 162),
-    "surface2":  (91,  96, 120),
-    "surface1":  (73,  77, 100),
-    "surface0":  (54,  58,  78),
-    "base":      (36,  39,  58),
-    "mantle":    (30,  32,  48),
-    "crust":     (24,  25,  38),
+    "flamingo": (240, 198, 198),
+    "pink": (245, 189, 230),
+    "mauve": (198, 160, 246),
+    "red": (237, 135, 150),
+    "maroon": (238, 153, 160),
+    "peach": (245, 169, 127),
+    "yellow": (238, 212, 159),
+    "green": (166, 218, 149),
+    "teal": (139, 213, 202),
+    "sky": (145, 215, 227),
+    "sapphire": (125, 196, 228),
+    "blue": (138, 173, 244),
+    "lavender": (183, 189, 248),
+    "text": (202, 211, 245),
+    "subtext1": (184, 192, 224),
+    "overlay2": (147, 154, 183),
+    "overlay1": (128, 135, 162),
+    "surface2": (91, 96, 120),
+    "surface1": (73, 77, 100),
+    "surface0": (54, 58, 78),
+    "base": (36, 39, 58),
+    "mantle": (30, 32, 48),
+    "crust": (24, 25, 38),
 }
 
 # ── Nerd Font v3 icons ────────────────────────────────────────────────────────
-ICON_VIM     = ""      # nf-dev-vim
-ICON_FOLDER  = ""      # nf-cod-folder
-ICON_BRANCH  = ""      # nf-dev-git_branch
-ICON_AHEAD   = ""      # nf-fa-arrow_up
-ICON_BEHIND  = ""      # nf-fa-arrow_down
-ICON_DIRTY   = ""      # nf-fa-exclamation_circle
-ICON_TIMER   = "\U000f051b"  # nf-md-timer_outline  (U+F051B)
-ICON_ADD     = ""      # nf-oct-diff_added
-ICON_DEL     = ""      # nf-oct-diff_removed
-ICON_MODEL   = ""      # nf-fa-robot
-ICON_BRAIN   = "\U000f068b"  # nf-md-brain          (U+F068B)
-ICON_BLOCK   = "\U000f03bc"  # nf-md-hourglass_empty (U+F03BC) — JSONL fallback
-ICON_BLOCK_LIVE = "\U000f0e89"  # nf-md-hourglass_full  (U+F0E89) — OAuth authoritative
-ICON_WEEKLY  = ""      # nf-fa-calendar
+ICON_VIM = ""  # nf-dev-vim
+ICON_FOLDER = ""  # nf-cod-folder
+ICON_BRANCH = ""  # nf-dev-git_branch
+ICON_AHEAD = ""  # nf-fa-arrow_up
+ICON_BEHIND = ""  # nf-fa-arrow_down
+ICON_DIRTY = ""  # nf-fa-exclamation_circle
+ICON_TIMER = "\U000f051b"  # nf-md-timer_outline  (U+F051B)
+ICON_ADD = ""  # nf-oct-diff_added
+ICON_DEL = ""  # nf-oct-diff_removed
+ICON_MODEL = "✱"  # nf-fa-robot
+ICON_BRAIN = "󰧑"  # nf-md-brain          (U+F068B)
+ICON_BLOCK = ""  # nf-md-hourglass_empty (U+F03BC) — JSONL fallback
+ICON_BLOCK_LIVE = ""  # nf-md-hourglass_full  (U+F0E89) — OAuth authoritative
+ICON_WEEKLY = ""  # nf-fa-calendar
 
 # Powerline right-filled separator (U+E0B0)
 _CHEV = ""
 
 # VIM mode → display letter and bg palette name
 _VIM_LETTER: dict[str, str] = {
-    "NORMAL":      "N",
-    "INSERT":      "I",
-    "VISUAL":      "V",
+    "NORMAL": "N",
+    "INSERT": "I",
+    "VISUAL": "V",
     "VISUAL LINE": "V",
 }
 _VIM_COLOR: dict[str, str] = {
-    "NORMAL":      "blue",
-    "INSERT":      "green",
-    "VISUAL":      "mauve",
+    "NORMAL": "blue",
+    "INSERT": "green",
+    "VISUAL": "mauve",
     "VISUAL LINE": "lavender",
 }
-
 
 # ── ANSI helpers ──────────────────────────────────────────────────────────────
 
@@ -103,14 +102,11 @@ def _fg(name: str) -> str:
     r, g, b = _P[name]
     return f"\x1b[38;2;{r};{g};{b}m"
 
-
 def _bg(name: str) -> str:
     r, g, b = _P[name]
     return f"\x1b[48;2;{r};{g};{b}m"
 
-
 _RESET = "\x1b[0m"
-
 
 def _pct_color(pct: float) -> str:
     if pct >= 90:
@@ -120,7 +116,6 @@ def _pct_color(pct: float) -> str:
     if pct >= 50:
         return "yellow"
     return "green"
-
 
 # ── Powerline renderer ────────────────────────────────────────────────────────
 
@@ -133,7 +128,6 @@ class Segment:
         self.content = content  # icon + text, no surrounding spaces
         self.bg = bg
         self.fg = fg
-
 
 def render_line(segments: list[Segment]) -> str:
     """Join Segments with Powerline chevrons into a single ANSI string."""
@@ -150,7 +144,6 @@ def render_line(segments: list[Segment]) -> str:
     r, g, b = _P[segments[-1].bg]
     parts.append(f"{_RESET}\x1b[38;2;{r};{g};{b}m{_CHEV}{_RESET}")
     return "".join(parts)
-
 
 # ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -170,19 +163,17 @@ def _fmt_duration(seconds: float) -> str:
         return f"{m}m {s}s" if s else f"{m}m"
     return f"{s}s"
 
-
 def _fmt_cwd(path: str) -> str:
     """Shorten a filesystem path: replace $HOME with ~, collapse mid if >40 chars."""
     home = str(Path.home())
     if path.startswith(home):
-        path = "~" + path[len(home):]
+        path = "~" + path[len(home) :]
     if len(path) <= 40:
         return path
     parts = path.split("/")
-    head = parts[0]          # "~" or ""
+    head = parts[0]  # "~" or ""
     tail = "/".join(parts[-2:])
     return f"{head}/…/{tail}"
-
 
 # ── Git ───────────────────────────────────────────────────────────────────────
 
@@ -192,7 +183,6 @@ def _run(cmd: list[str], cwd: Optional[str] = None) -> Optional[str]:
         return r.stdout.strip() if r.returncode == 0 else None
     except Exception:
         return None
-
 
 def _git_info(cwd: str) -> Optional[dict]:
     """Return {branch, ahead, behind, dirty} or None if not a git repo."""
@@ -206,12 +196,12 @@ def _git_info(cwd: str) -> Optional[dict]:
     if not lines or not lines[0].startswith("## "):
         return None
 
-    header = lines[0][3:]   # strip "## "
+    header = lines[0][3:]  # strip "## "
     ahead = behind = 0
 
     ab = re.search(r"\[(?:ahead (\d+))?(?:,\s*)?(?:behind (\d+))?\]", header)
     if ab:
-        ahead  = int(ab.group(1) or 0)
+        ahead = int(ab.group(1) or 0)
         behind = int(ab.group(2) or 0)
     else:
         only_behind = re.search(r"\[behind (\d+)\]", header)
@@ -220,7 +210,7 @@ def _git_info(cwd: str) -> Optional[dict]:
 
     branch = re.split(r"\.\.\.|\s+\[", header)[0].strip()
     if branch.startswith("No commits yet on "):
-        branch = branch[len("No commits yet on "):]
+        branch = branch[len("No commits yet on ") :]
     elif branch in ("HEAD (no branch)", "HEAD"):
         sha = _run(["git", "rev-parse", "--short", "HEAD"], cwd)
         branch = f"➤ {sha}" if sha else "detached"
@@ -228,26 +218,22 @@ def _git_info(cwd: str) -> Optional[dict]:
     dirty = any(ln.strip() for ln in lines[1:])
     return {"branch": branch, "ahead": ahead, "behind": behind, "dirty": dirty}
 
-
 # ── JSONL usage tracker ───────────────────────────────────────────────────────
 
 _CACHE_DIR = Path(f"/tmp/cc-statusline-cache-{os.getuid()}")
-_AGG_CACHE  = _CACHE_DIR / "aggregate.json"
-_SES_DIR    = _CACHE_DIR / "sessions"
-_AGG_TTL    = 30   # seconds between full re-scans
-
+_AGG_CACHE = _CACHE_DIR / "aggregate.json"
+_SES_DIR = _CACHE_DIR / "sessions"
+_AGG_TTL = 30  # seconds between full re-scans
 
 def _session_cache_path(jsonl: Path) -> Path:
     h = hashlib.md5(str(jsonl).encode(), usedforsecurity=False).hexdigest()
     return _SES_DIR / f"{h}.json"
-
 
 def _parse_ts(ts: str) -> Optional[float]:
     try:
         return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
     except Exception:
         return None
-
 
 def _is_command_msg(content) -> bool:
     text = content if isinstance(content, str) else ""
@@ -256,7 +242,6 @@ def _is_command_msg(content) -> bool:
             if isinstance(item, dict):
                 text += item.get("text", "")
     return "<command-name>" in text or "<local-command-stdout>" in text
-
 
 def _parse_jsonl(path: Path) -> Optional[dict]:
     """Parse one JSONL session file. Returns dict or None on failure."""
@@ -306,13 +291,12 @@ def _parse_jsonl(path: Path) -> Optional[dict]:
 
     return {
         "start_ts": min(timestamps),
-        "end_ts":   max(timestamps),
-        "prompts":  prompts,
+        "end_ts": max(timestamps),
+        "prompts": prompts,
         "sonnet_r": sonnet_r,
-        "opus_r":   opus_r,
-        "total_r":  max(total_r, 1),
+        "opus_r": opus_r,
+        "total_r": max(total_r, 1),
     }
-
 
 def _cached_session(jsonl: Path, mtime: float) -> Optional[dict]:
     try:
@@ -325,14 +309,12 @@ def _cached_session(jsonl: Path, mtime: float) -> Optional[dict]:
         pass
     return None
 
-
 def _save_session(jsonl: Path, mtime: float, info: dict) -> None:
     try:
         _SES_DIR.mkdir(parents=True, exist_ok=True)
         _session_cache_path(jsonl).write_text(json.dumps({**info, "mtime": mtime}))
     except Exception:
         pass
-
 
 def _load_sessions() -> list[dict]:
     projects = Path.home() / ".claude" / "projects"
@@ -353,10 +335,9 @@ def _load_sessions() -> list[dict]:
             sessions.append(info)
     return sessions
 
-
 def _compute_stats(sessions: list[dict], now: float) -> dict:
     window_5h = now - 5 * 3600
-    window_7d  = now - 7 * 24 * 3600
+    window_7d = now - 7 * 24 * 3600
 
     # 5h block: prorate prompts by overlap fraction inside the 5h window
     prompt_5h = 0
@@ -365,7 +346,7 @@ def _compute_stats(sessions: list[dict], now: float) -> dict:
         if s["end_ts"] < window_5h:
             continue
         ov_start = max(s["start_ts"], window_5h)
-        ov_end   = min(s["end_ts"], now)
+        ov_end = min(s["end_ts"], now)
         if ov_end <= ov_start:
             continue
         dur = max(s["end_ts"] - s["start_ts"], 1)
@@ -382,10 +363,10 @@ def _compute_stats(sessions: list[dict], now: float) -> dict:
         if s["end_ts"] < window_7d:
             continue
         ov_start = max(s["start_ts"], window_7d)
-        ov_end   = min(s["end_ts"], now)
+        ov_end = min(s["end_ts"], now)
         dur_h = max(0.0, ov_end - ov_start) / 3600
         sonnet_hours += dur_h * s["sonnet_r"] / s["total_r"]
-        opus_hours   += dur_h * s["opus_r"]   / s["total_r"]
+        opus_hours += dur_h * s["opus_r"] / s["total_r"]
 
     # Next Monday 00:00 UTC = weekly reset point
     dt_now = datetime.fromtimestamp(now, tz=timezone.utc)
@@ -396,13 +377,12 @@ def _compute_stats(sessions: list[dict], now: float) -> dict:
     weekly_reset_remaining = next_mon.timestamp() - now
 
     return {
-        "prompt_5h":              prompt_5h,
-        "time_remaining_5h":      time_remaining_5h,
-        "sonnet_hours":           sonnet_hours,
-        "opus_hours":             opus_hours,
+        "prompt_5h": prompt_5h,
+        "time_remaining_5h": time_remaining_5h,
+        "sonnet_hours": sonnet_hours,
+        "opus_hours": opus_hours,
         "weekly_reset_remaining": weekly_reset_remaining,
     }
-
 
 def _get_usage_stats() -> Optional[dict]:
     """Return aggregate stats from cache or freshly computed."""
@@ -425,7 +405,6 @@ def _get_usage_stats() -> Optional[dict]:
     except Exception:
         return None
 
-
 # ── OAuth quota path ──────────────────────────────────────────────────────────
 #
 # Reads Claude Code's own OAuth access token from ~/.claude/.credentials.json
@@ -436,20 +415,21 @@ def _get_usage_stats() -> Optional[dict]:
 #
 # See docs/adr/0004-oauth-quota-source-read-only.md for the design rationale.
 
-_OAUTH_URL          = "https://api.anthropic.com/api/oauth/usage"
-_OAUTH_CREDS_PATH   = Path.home() / ".claude" / ".credentials.json"
-_OAUTH_SNAPSHOT     = _CACHE_DIR / "oauth_snapshot.json"
-_OAUTH_STATE        = _CACHE_DIR / "oauth_state.json"
-_OAUTH_CACHE_TTL    = 300     # 5 min — render stale snapshot before refetching
-_OAUTH_STALE_WINDOW = 1800    # 30 min — beyond this, fall back to JSONL
-_OAUTH_429_COOLDOWN = 900     # 15 min — back off after rate limit
-_OAUTH_TIMEOUT      = 1.5     # seconds — cap render-path latency
-_OAUTH_AXES         = ("five_hour", "seven_day", "seven_day_sonnet")
-_USER_AGENT         = f"cc-statusline/{__version__} (+https://github.com/tuandzung/cc-statusline)"
+_OAUTH_URL = "https://api.anthropic.com/api/oauth/usage"
+_OAUTH_CREDS_PATH = Path.home() / ".claude" / ".credentials.json"
+_OAUTH_SNAPSHOT = _CACHE_DIR / "oauth_snapshot.json"
+_OAUTH_STATE = _CACHE_DIR / "oauth_state.json"
+_OAUTH_CACHE_TTL = 300  # 5 min — render stale snapshot before refetching
+_OAUTH_STALE_WINDOW = 1800  # 30 min — beyond this, fall back to JSONL
+_OAUTH_429_COOLDOWN = 900  # 15 min — back off after rate limit
+_OAUTH_TIMEOUT = 1.5  # seconds — cap render-path latency
+_OAUTH_AXES = ("five_hour", "seven_day", "seven_day_sonnet")
+_USER_AGENT = (
+    f"cc-statusline/{__version__} (+https://github.com/tuandzung/cc-statusline)"
+)
 
 _DEBUG_ENABLED = os.environ.get("CC_STATUSLINE_DEBUG") == "1"
-_DEBUG_LOG     = Path.home() / ".cache" / "cc-statusline" / "debug.log"
-
+_DEBUG_LOG = Path.home() / ".cache" / "cc-statusline" / "debug.log"
 
 def _dlog(msg: str) -> None:
     if not _DEBUG_ENABLED:
@@ -460,7 +440,6 @@ def _dlog(msg: str) -> None:
             fh.write(f"{datetime.now().isoformat(timespec='seconds')} {msg}\n")
     except Exception:
         pass
-
 
 def _read_oauth_credentials() -> Optional[dict]:
     """Return {access, expires_at} from ~/.claude/.credentials.json or None.
@@ -485,7 +464,6 @@ def _read_oauth_credentials() -> Optional[dict]:
         expires_at = float(exp_ms) / 1000.0
     return {"access": access, "expires_at": expires_at}
 
-
 def _fetch_oauth_usage(access_token: str) -> tuple[str, Optional[dict]]:
     """Call /api/oauth/usage. Return (status, body).
 
@@ -495,11 +473,11 @@ def _fetch_oauth_usage(access_token: str) -> tuple[str, Optional[dict]]:
     req = urllib.request.Request(
         _OAUTH_URL,
         headers={
-            "Authorization":  f"Bearer {access_token}",
-            "Content-Type":   "application/json",
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
             "anthropic-beta": "oauth-2025-04-20",
-            "User-Agent":     _USER_AGENT,
-            "Accept":         "application/json",
+            "User-Agent": _USER_AGENT,
+            "Accept": "application/json",
         },
         method="GET",
     )
@@ -521,7 +499,6 @@ def _fetch_oauth_usage(access_token: str) -> tuple[str, Optional[dict]]:
     except Exception:
         return "network_error", None
 
-
 def _parse_resets_at(value) -> Optional[float]:
     if not isinstance(value, str) or not value:
         return None
@@ -529,7 +506,6 @@ def _parse_resets_at(value) -> Optional[float]:
         return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
     except Exception:
         return None
-
 
 def _normalize_oauth_response(body: dict, now: float) -> Optional[dict]:
     """Pick the axes we render, drop disabled/null/unknown ones."""
@@ -545,19 +521,17 @@ def _normalize_oauth_response(body: dict, now: float) -> Optional[dict]:
             continue
         axes[key] = {
             "utilization": float(util),
-            "resets_at":   _parse_resets_at(entry.get("resets_at")),
+            "resets_at": _parse_resets_at(entry.get("resets_at")),
         }
     if not axes:
         return None
     return {"fetched_at": now, "axes": axes}
-
 
 def _load_json(path: Path) -> Optional[dict]:
     try:
         return json.loads(path.read_text())
     except Exception:
         return None
-
 
 def _save_json(path: Path, data: dict) -> None:
     try:
@@ -566,14 +540,12 @@ def _save_json(path: Path, data: dict) -> None:
     except Exception:
         pass
 
-
 def _snapshot_reset_passed(snapshot: dict, now: float) -> bool:
     for ax in snapshot.get("axes", {}).values():
         ra = ax.get("resets_at")
         if isinstance(ra, (int, float)) and ra < now:
             return True
     return False
-
 
 def _get_oauth_stats() -> Optional[dict]:
     """Return a fresh-or-stale-within-window OAuth snapshot, or None to fall back.
@@ -595,7 +567,7 @@ def _get_oauth_stats() -> Optional[dict]:
         return None
 
     snapshot = _load_json(_OAUTH_SNAPSHOT)
-    state    = _load_json(_OAUTH_STATE) or {}
+    state = _load_json(_OAUTH_STATE) or {}
     blocked_until = state.get("blocked_until", 0)
 
     snap_age = float("inf")
@@ -605,18 +577,16 @@ def _get_oauth_stats() -> Optional[dict]:
     reset_passed = bool(snapshot) and _snapshot_reset_passed(snapshot, now)
 
     # If access token already expired, don't bother fetching — would 401.
-    token_expired = (
-        creds["expires_at"] is not None and creds["expires_at"] < now
-    )
+    token_expired = creds["expires_at"] is not None and creds["expires_at"] < now
     if token_expired:
         _dlog("oauth: token expired, skipping fetch")
         if snapshot and snap_age < _OAUTH_STALE_WINDOW and not reset_passed:
             return snapshot
         return None
 
-    must_fetch       = snap_age >= _OAUTH_CACHE_TTL or reset_passed
-    cooldown_active  = now < blocked_until
-    fetch_allowed    = must_fetch and (not cooldown_active or reset_passed)
+    must_fetch = snap_age >= _OAUTH_CACHE_TTL or reset_passed
+    cooldown_active = now < blocked_until
+    fetch_allowed = must_fetch and (not cooldown_active or reset_passed)
 
     if fetch_allowed:
         status, body = _fetch_oauth_usage(creds["access"])
@@ -639,18 +609,37 @@ def _get_oauth_stats() -> Optional[dict]:
         return snapshot
     return None
 
-
 # ── Tier limits ───────────────────────────────────────────────────────────────
 
 _EMBEDDED_LIMITS: dict[str, dict] = {
-    "free":          {"5h_cycle": {"min": 10,  "max": 40},  "weekly_sonnet": {"min": 40,  "max": 80}},
-    "pro":           {"5h_cycle": {"min": 10,  "max": 40},  "weekly_sonnet": {"min": 40,  "max": 80}},
-    "max_5x":        {"5h_cycle": {"min": 50,  "max": 200}, "weekly_sonnet": {"min": 140, "max": 280}, "weekly_opus": {"min": 15, "max": 35}},
-    "max_20x":       {"5h_cycle": {"min": 200, "max": 800}, "weekly_sonnet": {"min": 240, "max": 480}, "weekly_opus": {"min": 24, "max": 40}},
-    "team_standard": {"5h_cycle": {"min": 13,  "max": 50},  "weekly_sonnet": {"min": 50,  "max": 100}},
-    "team_premium":  {"5h_cycle": {"min": 63,  "max": 250}, "weekly_sonnet": {"min": 250, "max": 500}, "weekly_opus": {"min": 19, "max": 44}},
+    "free": {
+        "5h_cycle": {"min": 10, "max": 40},
+        "weekly_sonnet": {"min": 40, "max": 80},
+    },
+    "pro": {
+        "5h_cycle": {"min": 10, "max": 40},
+        "weekly_sonnet": {"min": 40, "max": 80},
+    },
+    "max_5x": {
+        "5h_cycle": {"min": 50, "max": 200},
+        "weekly_sonnet": {"min": 140, "max": 280},
+        "weekly_opus": {"min": 15, "max": 35},
+    },
+    "max_20x": {
+        "5h_cycle": {"min": 200, "max": 800},
+        "weekly_sonnet": {"min": 240, "max": 480},
+        "weekly_opus": {"min": 24, "max": 40},
+    },
+    "team_standard": {
+        "5h_cycle": {"min": 13, "max": 50},
+        "weekly_sonnet": {"min": 50, "max": 100},
+    },
+    "team_premium": {
+        "5h_cycle": {"min": 63, "max": 250},
+        "weekly_sonnet": {"min": 250, "max": 500},
+        "weekly_opus": {"min": 19, "max": 44},
+    },
 }
-
 
 def _tier_limits() -> dict:
     tier = os.environ.get("CC_PLAN_TIER", "pro").lower().strip()
@@ -666,26 +655,23 @@ def _tier_limits() -> dict:
                 break
     return _EMBEDDED_LIMITS.get(tier, _EMBEDDED_LIMITS["pro"])
 
-
 # ── Segment builders ──────────────────────────────────────────────────────────
 
 def _seg_vim(data: dict) -> Optional[Segment]:
     vim = data.get("vim")
     if not vim:
         return None
-    mode   = vim.get("mode", "NORMAL")
+    mode = vim.get("mode", "NORMAL")
     letter = _VIM_LETTER.get(mode, mode[:1])
-    color  = _VIM_COLOR.get(mode, "blue")
+    color = _VIM_COLOR.get(mode, "blue")
     return Segment(f"{ICON_VIM} {letter}", color)
-
 
 def _seg_cwd(data: dict) -> Segment:
     path = (data.get("workspace") or {}).get("current_dir") or os.getcwd()
     return Segment(f"{ICON_FOLDER} {_fmt_cwd(path)}", "blue")
 
-
 def _seg_git(data: dict) -> Optional[Segment]:
-    cwd  = (data.get("workspace") or {}).get("current_dir") or os.getcwd()
+    cwd = (data.get("workspace") or {}).get("current_dir") or os.getcwd()
     info = _git_info(cwd)
     if not info:
         return None
@@ -699,11 +685,10 @@ def _seg_git(data: dict) -> Optional[Segment]:
     bg_color = "peach" if info["dirty"] else "mauve"
     return Segment(f"{ICON_BRANCH} {text}", bg_color)
 
-
 def _seg_metrics(data: dict) -> Segment:
     cost = data.get("cost") or {}
-    dur_ms  = int(cost.get("total_duration_ms") or 0)
-    added   = cost.get("total_lines_added")   or 0
+    dur_ms = int(cost.get("total_duration_ms") or 0)
+    added = cost.get("total_lines_added") or 0
     removed = cost.get("total_lines_removed") or 0
     dur_str = _fmt_duration(dur_ms / 1000)
     return Segment(
@@ -711,58 +696,53 @@ def _seg_metrics(data: dict) -> Segment:
         "teal",
     )
 
-
 def _seg_model(data: dict) -> Segment:
     name = (data.get("model") or {}).get("display_name") or "—"
     return Segment(f"{ICON_MODEL} {name}", "sapphire")
-
 
 def _seg_context(data: dict) -> Segment:
     ctx = data.get("context_window") or {}
     pct = ctx.get("used_percentage")
     if pct is None:
         return Segment(f"{ICON_BRAIN} —", "surface2")
-    pct_i     = int(pct)
-    total_in  = ctx.get("total_input_tokens") or 0
-    size      = ctx.get("context_window_size") or 200_000
-    total_k   = round(total_in / 1000)
-    size_k    = round(size / 1000)
+    pct_i = int(pct)
+    total_in = ctx.get("total_input_tokens") or 0
+    size = ctx.get("context_window_size") or 200_000
+    total_k = round(total_in / 1000)
+    size_k = round(size / 1000)
     return Segment(
         f"{ICON_BRAIN} {pct_i}% ({total_k}k/{size_k}k)",
         _pct_color(pct_i),
     )
 
-
 def _seg_block5h(stats: Optional[dict], tier: dict) -> Segment:
     if not stats:
         return Segment(f"{ICON_BLOCK} —", "surface2")
     prompts = stats.get("prompt_5h", 0)
-    limit   = (tier.get("5h_cycle") or {}).get("min") or 10
-    pct     = min(100, round(prompts / limit * 100))
-    remain  = stats.get("time_remaining_5h", 0)
+    limit = (tier.get("5h_cycle") or {}).get("min") or 10
+    pct = min(100, round(prompts / limit * 100))
+    remain = stats.get("time_remaining_5h", 0)
     return Segment(
         f"{ICON_BLOCK} {pct}% ({_fmt_duration(remain)})",
         _pct_color(pct),
     )
 
-
 def _seg_weekly(stats: Optional[dict], tier: dict) -> Segment:
     if not stats:
         return Segment(f"{ICON_WEEKLY} —", "surface2")
-    s_h      = stats.get("sonnet_hours", 0.0)
-    o_h      = stats.get("opus_hours",   0.0)
-    remain   = stats.get("weekly_reset_remaining", 0)
-    s_lim    = (tier.get("weekly_sonnet") or {}).get("min") or 40
-    o_cfg    = tier.get("weekly_opus")
-    s_pct    = min(100, round(s_h / s_lim * 100))
-    text     = f"{ICON_WEEKLY} {s_pct}% S"
+    s_h = stats.get("sonnet_hours", 0.0)
+    o_h = stats.get("opus_hours", 0.0)
+    remain = stats.get("weekly_reset_remaining", 0)
+    s_lim = (tier.get("weekly_sonnet") or {}).get("min") or 40
+    o_cfg = tier.get("weekly_opus")
+    s_pct = min(100, round(s_h / s_lim * 100))
+    text = f"{ICON_WEEKLY} {s_pct}% S"
     if o_cfg:
         o_lim = o_cfg.get("min") or 1
         o_pct = min(100, round(o_h / o_lim * 100))
         text += f"  ⚡ {o_pct}% O"
     text += f" ({_fmt_duration(remain)})"
     return Segment(text, _pct_color(s_pct))
-
 
 def _oauth_axis_pct(snapshot: dict, key: str) -> Optional[int]:
     """Return integer % for a given axis, or None if absent.
@@ -780,7 +760,6 @@ def _oauth_axis_pct(snapshot: dict, key: str) -> Optional[int]:
         util *= 100
     return min(100, max(0, round(util)))
 
-
 def _seg_block5h_oauth(snapshot: dict) -> Segment:
     pct = _oauth_axis_pct(snapshot, "five_hour")
     if pct is None:
@@ -792,7 +771,6 @@ def _seg_block5h_oauth(snapshot: dict) -> Segment:
         _pct_color(pct),
     )
 
-
 def _seg_weekly_oauth(snapshot: dict) -> Segment:
     s_pct = _oauth_axis_pct(snapshot, "seven_day_sonnet")
     a_pct = _oauth_axis_pct(snapshot, "seven_day")
@@ -800,11 +778,10 @@ def _seg_weekly_oauth(snapshot: dict) -> Segment:
         return Segment(f"{ICON_WEEKLY} —", "surface2")
 
     # Anchor "time remaining" to seven_day (all-model), falling back to sonnet.
-    axes   = snapshot.get("axes", {})
-    resets = (
-        axes.get("seven_day", {}).get("resets_at")
-        or axes.get("seven_day_sonnet", {}).get("resets_at")
-    )
+    axes = snapshot.get("axes", {})
+    resets = axes.get("seven_day", {}).get("resets_at") or axes.get(
+        "seven_day_sonnet", {}
+    ).get("resets_at")
     remain = max(0.0, resets - time.time()) if isinstance(resets, (int, float)) else 0
 
     parts = []
@@ -816,7 +793,6 @@ def _seg_weekly_oauth(snapshot: dict) -> Segment:
 
     worst = max(p for p in (s_pct, a_pct) if p is not None)
     return Segment(text, _pct_color(worst))
-
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -852,14 +828,13 @@ def main() -> None:
             _seg_weekly_oauth(oauth_snap),
         ]
     else:
-        tier  = _tier_limits()
+        tier = _tier_limits()
         stats = _get_usage_stats()
         segs3 = [_seg_block5h(stats, tier), _seg_weekly(stats, tier)]
 
     print(render_line(segs1))
     print(render_line(segs2))
     print(render_line(segs3))
-
 
 if __name__ == "__main__":
     main()
