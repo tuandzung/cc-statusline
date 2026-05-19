@@ -20,6 +20,7 @@ Merge the following into the existing JSON (preserve all existing keys):
 ```json
 {
   "statusLine": {
+    "type": "command",
     "command": "python3 ${CLAUDE_PLUGIN_ROOT}/statusline.py",
     "refreshInterval": 30,
     "hideVimModeIndicator": true
