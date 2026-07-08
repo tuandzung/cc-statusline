@@ -5,12 +5,17 @@ Line 1: [VIM mode]  [CWD]  [Git branch/ahead/behind/dirty]  [Session metrics]
 Line 2: [Model]  [Context %]
 Line 3: [5h block %]  [Weekly %]
 
-Line 3 has two data sources, in priority order:
-  1. OAuth path  — Anthropic /api/oauth/usage (authoritative utilization).
+Line 3 has three data sources, in priority order:
+  1. codexbar path — third-party `codexbar serve` local daemon
+                   (https://github.com/steipete/CodexBar), queried at
+                   http://127.0.0.1:8080/usage?provider=claude. Pure client:
+                   never spawned or supervised by us. Only source with Pace.
+  2. OAuth path  — Anthropic /api/oauth/usage (authoritative utilization).
                    Enabled when ~/.claude/.credentials.json contains a
                    claudeAiOauth.accessToken. Read-only; never refreshes.
-  2. JSONL path  — local model-hour heuristic over ~/.claude/projects/*.jsonl,
-                   denominated against CC_PLAN_TIER. Used when (1) is unavailable.
+  3. JSONL path  — local model-hour heuristic over ~/.claude/projects/*.jsonl,
+                   denominated against CC_PLAN_TIER. Used when (1) and (2) are
+                   unavailable.
 
 Config:
   CC_PLAN_TIER         free|pro|max_5x|max_20x|team_standard|team_premium (default: pro)
@@ -33,7 +38,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
-__version__ = "1.1.3"
+__version__ = "1.2.0"
 
 # ── Catppuccin Macchiato palette (24-bit RGB) ─────────────────────────────────
 _P: dict[str, tuple[int, int, int]] = {
@@ -78,6 +83,8 @@ ICON_BRAIN = "󰧑"  # nf-md-brain          (U+F068B)
 ICON_BLOCK = ""  # nf-md-hourglass_empty (U+F03BC) — JSONL fallback
 ICON_BLOCK_LIVE = ""  # nf-md-hourglass_full  (U+F0E89) — OAuth authoritative
 ICON_WEEKLY = ""  # nf-fa-calendar
+ICON_PACE_OK = "\uf058"  # nf-fa-check_circle — codexbar: will last to reset
+ICON_PACE_BEHIND = "\uf071"  # nf-fa-exclamation_triangle — codexbar: won't last
 
 # Powerline right-filled separator (U+E0B0)
 _CHEV = ""
@@ -613,6 +620,110 @@ def _get_oauth_stats() -> Optional[dict]:
         return snapshot
     return None
 
+# ── codexbar quota path ─────────────────────────────────────────────────────
+#
+# Queries the third-party `codexbar serve` daemon (steipete/CodexBar) for the
+# same Anthropic quota data as the OAuth path, plus a weekly Pace indicator
+# codexbar computes itself. We are a pure client: we never spawn, health-check,
+# or restart the daemon. Any failure — unreachable, timeout, malformed JSON,
+# Claude provider not configured in codexbar — falls back to the OAuth path.
+#
+# See docs/adr/0005-codexbar-as-preferred-quota-source.md for the rationale.
+
+_CODEXBAR_URL = "http://127.0.0.1:8080/usage?provider=claude"
+_CODEXBAR_SNAPSHOT = _CACHE_DIR / "codexbar_snapshot.json"
+_CODEXBAR_CACHE_TTL = 300  # 5 min — mirrors _OAUTH_CACHE_TTL
+_CODEXBAR_STALE_WINDOW = 1800  # 30 min — mirrors _OAUTH_STALE_WINDOW
+_CODEXBAR_TIMEOUT = 0.2  # 200ms — a hung local daemon must never lag a render
+
+def _fetch_codexbar_usage() -> Optional[dict]:
+    """GET codexbar's /usage endpoint for the claude provider. None on any failure."""
+    req = urllib.request.Request(
+        _CODEXBAR_URL, headers={"Accept": "application/json"}, method="GET"
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=_CODEXBAR_TIMEOUT) as resp:
+            raw = resp.read(65536)
+        body = json.loads(raw)
+        return body if isinstance(body, dict) else None
+    except Exception as e:
+        _dlog(f"codexbar: fetch failed: {e}")
+        return None
+
+def _normalize_codexbar_response(body: dict, now: float) -> Optional[dict]:
+    """Defensive parse of codexbar's /usage response.
+
+    This is an unversioned third-party JSON shape we don't control. Any
+    missing or mistyped field is treated as absent rather than raised, so
+    schema drift fails safe into the OAuth fallback instead of misreporting.
+    """
+    payload = body
+    claude = payload.get("claude")
+    if isinstance(claude, dict):
+        payload = claude
+
+    def _axis(section) -> tuple[Optional[int], Optional[float]]:
+        if not isinstance(section, dict):
+            return None, None
+        pct = section.get("usedPercent")
+        pct = min(100, max(0, round(pct))) if isinstance(pct, (int, float)) else None
+        return pct, _parse_resets_at(section.get("resetsAt"))
+
+    five_pct, five_resets = _axis(payload.get("primary"))
+    week_pct, week_resets = _axis(payload.get("secondary"))
+    if five_pct is None and week_pct is None:
+        return None
+
+    pace = payload.get("pace")
+    week_pace = pace.get("secondary") if isinstance(pace, dict) else None
+    will_last = week_pace.get("willLastToReset") if isinstance(week_pace, dict) else None
+    will_last = will_last if isinstance(will_last, bool) else None
+
+    return {
+        "fetched_at": now,
+        "five_hour": {"pct": five_pct, "resets_at": five_resets},
+        "weekly": {"pct": week_pct, "resets_at": week_resets, "will_last_to_reset": will_last},
+    }
+
+def _codexbar_reset_passed(snapshot: dict, now: float) -> bool:
+    for key in ("five_hour", "weekly"):
+        ra = snapshot.get(key, {}).get("resets_at")
+        if isinstance(ra, (int, float)) and ra < now:
+            return True
+    return False
+
+def _get_codexbar_stats() -> Optional[dict]:
+    """Return a fresh-or-stale-within-window codexbar snapshot, or None to fall back.
+
+    No backoff state beyond the cache TTL: a refused loopback connection
+    fails near-instantly, so there's nothing to protect against by adding
+    one, unlike the 429 cooldown on the OAuth path.
+    """
+    now = time.time()
+    snapshot = _cache_load(_CODEXBAR_SNAPSHOT)
+    snap_age = float("inf")
+    if snapshot and isinstance(snapshot.get("fetched_at"), (int, float)):
+        snap_age = now - snapshot["fetched_at"]
+    reset_passed = bool(snapshot) and _codexbar_reset_passed(snapshot, now)
+
+    if snap_age < _CODEXBAR_CACHE_TTL and not reset_passed:
+        return snapshot
+
+    body = _fetch_codexbar_usage()
+    if body is not None:
+        new_snap = _normalize_codexbar_response(body, now)
+        if new_snap:
+            _cache_save(_CODEXBAR_SNAPSHOT, new_snap)
+            _dlog("codexbar: fetched ok")
+            return new_snap
+        _dlog("codexbar: response normalized to empty, falling back")
+    else:
+        _dlog("codexbar: unreachable")
+
+    if snapshot and snap_age < _CODEXBAR_STALE_WINDOW and not reset_passed:
+        return snapshot
+    return None
+
 # ── Tier limits ───────────────────────────────────────────────────────────────
 
 _EMBEDDED_LIMITS: dict[str, dict] = {
@@ -798,6 +909,39 @@ def _seg_weekly_oauth(snapshot: dict) -> Segment:
     worst = max(p for p in (s_pct, a_pct) if p is not None)
     return Segment(text, _pct_color(worst))
 
+def _seg_block5h_codexbar(snapshot: dict) -> Segment:
+    ax = snapshot.get("five_hour") or {}
+    pct = ax.get("pct")
+    if pct is None:
+        return Segment(f"{ICON_BLOCK_LIVE} —", "surface2")
+    resets = ax.get("resets_at")
+    remain = max(0.0, resets - time.time()) if isinstance(resets, (int, float)) else 0
+    return Segment(
+        f"{ICON_BLOCK_LIVE} {pct}% ({_fmt_duration(remain)})",
+        _pct_color(pct),
+    )
+
+def _seg_weekly_codexbar(snapshot: dict) -> Segment:
+    """Weekly segment for the codexbar path. Only source that carries Pace:
+    an icon driven by willLastToReset, appended after the percentage — never
+    the undocumented `stage` string (see ADR-0005)."""
+    ax = snapshot.get("weekly") or {}
+    pct = ax.get("pct")
+    if pct is None:
+        return Segment(f"{ICON_WEEKLY} —", "surface2")
+    resets = ax.get("resets_at")
+    remain = max(0.0, resets - time.time()) if isinstance(resets, (int, float)) else 0
+
+    will_last = ax.get("will_last_to_reset")
+    pace_icon = ""
+    if will_last is True:
+        pace_icon = f" {ICON_PACE_OK}"
+    elif will_last is False:
+        pace_icon = f" {ICON_PACE_BEHIND}"
+
+    text = f"{ICON_WEEKLY} {pct}%{pace_icon} ({_fmt_duration(remain)})"
+    return Segment(text, _pct_color(pct))
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -823,11 +967,17 @@ def main() -> None:
     # Line 2: model → context
     segs2: list[Segment] = [_seg_model(data), _seg_context(data)]
 
-    # Line 3: prefer Anthropic-authoritative OAuth snapshot when available,
-    # else fall back to the JSONL-derived model-hour heuristic.
-    oauth_snap = _get_oauth_stats()
-    if oauth_snap:
+    # Line 3: prefer the codexbar daemon (adds Pace), then Anthropic-authoritative
+    # OAuth, else fall back to the JSONL-derived model-hour heuristic.
+    codexbar_snap = _get_codexbar_stats()
+    oauth_snap = None if codexbar_snap else _get_oauth_stats()
+    if codexbar_snap:
         segs3: list[Segment] = [
+            _seg_block5h_codexbar(codexbar_snap),
+            _seg_weekly_codexbar(codexbar_snap),
+        ]
+    elif oauth_snap:
+        segs3 = [
             _seg_block5h_oauth(oauth_snap),
             _seg_weekly_oauth(oauth_snap),
         ]

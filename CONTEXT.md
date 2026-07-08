@@ -22,10 +22,23 @@ A named Catppuccin Macchiato colour (e.g. `base`, `crust`, `mauve`, `sapphire`).
 
 ### Usage tracking
 
-Two data sources, ordered by priority:
+Three data sources, ordered by priority:
 
-1. **Quota snapshot** (preferred) — Anthropic's authoritative `utilization` returned by `GET /api/oauth/usage`. Requires **OAuth credentials**.
-2. **JSONL-derived stats** (fallback) — local heuristic over **JSONL transcripts**. Used when OAuth credentials absent or `/api/oauth/usage` unreachable.
+1. **codexbar source** (preferred) — third-party `codexbar serve` local daemon, queried for the same Anthropic quota data plus **Pace**.
+2. **Quota snapshot** (fallback) — Anthropic's authoritative `utilization` returned by `GET /api/oauth/usage`. Requires **OAuth credentials**.
+3. **JSONL-derived stats** (last resort) — local heuristic over **JSONL transcripts**. Used when OAuth credentials absent or `/api/oauth/usage` unreachable.
+
+**codexbar source**:
+The `codexbar serve` daemon (third-party, [steipete/CodexBar](https://github.com/steipete/CodexBar)), queried via `GET http://127.0.0.1:8080/usage?provider=claude`. cc-statusline is a pure client — it never spawns, supervises, or restarts the daemon; if nothing answers, that render falls back to **Quota snapshot**. Only source that carries **Pace**.
+_Avoid_: codexbar API, the daemon.
+
+**Pace**:
+A weekly-only trend indicator, present only when **codexbar source** served the render. Rendered as a single icon appended to the weekly segment, driven by **willLastToReset**. Has no equivalent on the **Quota snapshot** or **JSONL-derived stats** paths — Line 3's shape is not stable across sources for this indicator.
+_Avoid_: pace stage, trend, projection.
+
+**willLastToReset**:
+The boolean codexbar returns alongside **Pace** indicating whether current usage will exhaust the weekly window before it resets. Drives the **Pace** icon directly. Deliberately used in place of codexbar's `stage` field, whose full set of string values isn't documented and would risk silently falling through on future codexbar releases.
+_Avoid_: stage, pace stage.
 
 **Quota snapshot**:
 A point-in-time response from `https://api.anthropic.com/api/oauth/usage`. Map keyed by quota axis (`five_hour`, `seven_day`, `seven_day_sonnet`, `monthly_limit`, `extra_usage`). Each entry: `{utilization: 0..1, resets_at: RFC3339, is_enabled: bool}`. `utilization` is the **Authoritative %** — denominator is Anthropic's own enforced cap.
@@ -78,6 +91,7 @@ The directory referenced by `${CLAUDE_PLUGIN_ROOT}` at runtime. Contains `.claud
 ## Relationships
 
 - A **Tier** has 1..N usage axes (`5h_cycle` always; `weekly_sonnet` always; `weekly_opus` only for `max_5x`, `max_20x`, `team_premium`).
+- The **codexbar source** carries the same axes as **Quota snapshot** (it reads the same Anthropic OAuth API under the hood) plus **Pace**, which has no counterpart on the other two sources.
 - A **JSONL transcript** contributes 0..N **Prompts** to the **5h cycle** and 0..N **Model-hours** to the **Weekly window**.
 - A **Line** is composed of 1..N **Segments** joined by **Chevrons**.
 - The **Installer skill** writes the `statusLine.command` field; the **Plugin root** owns the script that field points at.
