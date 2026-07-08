@@ -8,8 +8,9 @@ Line 3: [5h block %]  [Weekly %]
 Line 3 has three data sources, in priority order:
   1. codexbar path — third-party `codexbar serve` local daemon
                    (https://github.com/steipete/CodexBar), queried at
-                   http://127.0.0.1:8080/usage?provider=claude. Pure client:
-                   never spawned or supervised by us. Only source with Pace.
+                   http://{CC_CODEXBAR_HOST}:{CC_CODEXBAR_PORT}/usage?provider=claude
+                   (default 127.0.0.1:8080). Pure client: never spawned or
+                   supervised by us. Only source with Pace.
   2. OAuth path  — Anthropic /api/oauth/usage (authoritative utilization).
                    Enabled when ~/.claude/.credentials.json contains a
                    claudeAiOauth.accessToken. Read-only; never refreshes.
@@ -21,6 +22,10 @@ Config:
   CC_PLAN_TIER         free|pro|max_5x|max_20x|team_standard|team_premium (default: pro)
   CC_STATUSLINE_DEBUG  set to "1" to log OAuth path decisions to
                        ~/.cache/cc-statusline/debug.log
+  CC_CODEXBAR_HOST     codexbar daemon host, bare host only, no scheme
+                       (default: 127.0.0.1)
+  CC_CODEXBAR_PORT     codexbar daemon port (default: 8080). Invalid or
+                       non-numeric values fall back to the default.
 
 Requires: Python 3.10+, Nerd Font v3 patched terminal font, 24-bit colour terminal.
 """
@@ -38,7 +43,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
-__version__ = "1.2.0"
+__version__ = "1.2.3"
 
 # ── Catppuccin Macchiato palette (24-bit RGB) ─────────────────────────────────
 _P: dict[str, tuple[int, int, int]] = {
@@ -630,16 +635,29 @@ def _get_oauth_stats() -> Optional[dict]:
 #
 # See docs/adr/0005-codexbar-as-preferred-quota-source.md for the rationale.
 
-_CODEXBAR_URL = "http://127.0.0.1:8080/usage?provider=claude"
+_CODEXBAR_DEFAULT_HOST = "127.0.0.1"
+_CODEXBAR_DEFAULT_PORT = 8080
 _CODEXBAR_SNAPSHOT = _CACHE_DIR / "codexbar_snapshot.json"
 _CODEXBAR_CACHE_TTL = 300  # 5 min — mirrors _OAUTH_CACHE_TTL
 _CODEXBAR_STALE_WINDOW = 1800  # 30 min — mirrors _OAUTH_STALE_WINDOW
 _CODEXBAR_TIMEOUT = 0.2  # 200ms — a hung local daemon must never lag a render
 
+def _codexbar_url() -> str:
+    """Build codexbar's /usage URL from CC_CODEXBAR_HOST/PORT, falling back to
+    the default on anything missing or invalid — a bad env var must never
+    break the statusline render."""
+    host = os.environ.get("CC_CODEXBAR_HOST", "").strip() or _CODEXBAR_DEFAULT_HOST
+    port_raw = os.environ.get("CC_CODEXBAR_PORT", "").strip()
+    try:
+        port = int(port_raw) if port_raw else _CODEXBAR_DEFAULT_PORT
+    except ValueError:
+        port = _CODEXBAR_DEFAULT_PORT
+    return f"http://{host}:{port}/usage?provider=claude"
+
 def _fetch_codexbar_usage() -> Optional[dict]:
     """GET codexbar's /usage endpoint for the claude provider. None on any failure."""
     req = urllib.request.Request(
-        _CODEXBAR_URL, headers={"Accept": "application/json"}, method="GET"
+        _codexbar_url(), headers={"Accept": "application/json"}, method="GET"
     )
     try:
         with urllib.request.urlopen(req, timeout=_CODEXBAR_TIMEOUT) as resp:
@@ -647,7 +665,11 @@ def _fetch_codexbar_usage() -> Optional[dict]:
         body = json.loads(raw)
         if isinstance(body, list):
             body = next(
-                (item for item in body if isinstance(item, dict) and item.get("provider") == "claude"),
+                (
+                    item
+                    for item in body
+                    if isinstance(item, dict) and item.get("provider") == "claude"
+                ),
                 None,
             )
         return body if isinstance(body, dict) else None
@@ -683,13 +705,19 @@ def _normalize_codexbar_response(body: dict, now: float) -> Optional[dict]:
 
     pace = payload.get("pace")
     week_pace = pace.get("secondary") if isinstance(pace, dict) else None
-    will_last = week_pace.get("willLastToReset") if isinstance(week_pace, dict) else None
+    will_last = (
+        week_pace.get("willLastToReset") if isinstance(week_pace, dict) else None
+    )
     will_last = will_last if isinstance(will_last, bool) else None
 
     return {
         "fetched_at": now,
         "five_hour": {"pct": five_pct, "resets_at": five_resets},
-        "weekly": {"pct": week_pct, "resets_at": week_resets, "will_last_to_reset": will_last},
+        "weekly": {
+            "pct": week_pct,
+            "resets_at": week_resets,
+            "will_last_to_reset": will_last,
+        },
     }
 
 def _codexbar_reset_passed(snapshot: dict, now: float) -> bool:

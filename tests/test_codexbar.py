@@ -87,7 +87,7 @@ def _mock_urlopen_ok(body: dict):
     payload = json.dumps(body).encode("utf-8")
 
     def _opener(req, timeout=None):
-        assert req.full_url == statusline._CODEXBAR_URL
+        assert req.full_url == statusline._codexbar_url()
         return _FakeHTTPResponse(payload)
     return _opener
 
@@ -99,6 +99,26 @@ def _mock_urlopen_unreachable():
 
 
 # ── Fetcher ───────────────────────────────────────────────────────────────────
+
+
+class TestCodexbarUrl:
+    def test_defaults(self, monkeypatch):
+        monkeypatch.delenv("CC_CODEXBAR_HOST", raising=False)
+        monkeypatch.delenv("CC_CODEXBAR_PORT", raising=False)
+        assert statusline._codexbar_url() == "http://127.0.0.1:8080/usage?provider=claude"
+
+    def test_host_and_port_override(self, monkeypatch):
+        monkeypatch.setenv("CC_CODEXBAR_HOST", "192.168.1.5")
+        monkeypatch.setenv("CC_CODEXBAR_PORT", "9999")
+        assert statusline._codexbar_url() == "http://192.168.1.5:9999/usage?provider=claude"
+
+    def test_invalid_port_falls_back_to_default(self, monkeypatch):
+        monkeypatch.setenv("CC_CODEXBAR_PORT", "not-a-port")
+        assert ":8080/" in statusline._codexbar_url()
+
+    def test_empty_host_falls_back_to_default(self, monkeypatch):
+        monkeypatch.setenv("CC_CODEXBAR_HOST", "")
+        assert statusline._codexbar_url().startswith("http://127.0.0.1:")
 
 
 class TestFetchCodexbarUsage:
