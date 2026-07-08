@@ -123,6 +123,25 @@ class TestFetchCodexbarUsage:
         )
         assert statusline._fetch_codexbar_usage() is None
 
+    def test_array_wrapped_body_unwraps_claude_provider(self, monkeypatch):
+        """Live codexbar wraps the response in a list of per-provider objects."""
+        wrapped = [{"provider": "claude", "usage": {"primary": {"usedPercent": 12}}}]
+        monkeypatch.setattr(
+            statusline.urllib.request,
+            "urlopen",
+            _mock_urlopen_raw(json.dumps(wrapped).encode()),
+        )
+        assert statusline._fetch_codexbar_usage() == wrapped[0]
+
+    def test_array_with_no_matching_provider_returns_none(self, monkeypatch):
+        wrapped = [{"provider": "codex", "usage": {}}]
+        monkeypatch.setattr(
+            statusline.urllib.request,
+            "urlopen",
+            _mock_urlopen_raw(json.dumps(wrapped).encode()),
+        )
+        assert statusline._fetch_codexbar_usage() is None
+
 
 def _mock_urlopen_raw(payload: bytes):
     def _opener(req, timeout=None):
@@ -153,6 +172,22 @@ class TestNormalizeCodexbarResponse:
     def test_both_axes_missing_returns_none(self):
         snap = statusline._normalize_codexbar_response({}, now=time.time())
         assert snap is None
+
+    def test_unwraps_usage_key(self):
+        """Live codexbar nests primary/secondary under 'usage', pace stays top-level."""
+        body = {
+            "provider": "claude",
+            "usage": {
+                "primary": {"usedPercent": 12, "resetsAt": _iso(time.time() + 3600)},
+                "secondary": {"usedPercent": 2, "resetsAt": _iso(time.time() + 86400)},
+            },
+            "pace": {"secondary": {"willLastToReset": True}},
+        }
+        snap = statusline._normalize_codexbar_response(body, now=time.time())
+        assert snap is not None
+        assert snap["five_hour"]["pct"] == 12
+        assert snap["weekly"]["pct"] == 2
+        assert snap["weekly"]["will_last_to_reset"] is True
 
     def test_unwraps_claude_provider_key(self):
         body = {"claude": _usage_body()}

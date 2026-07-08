@@ -645,6 +645,11 @@ def _fetch_codexbar_usage() -> Optional[dict]:
         with urllib.request.urlopen(req, timeout=_CODEXBAR_TIMEOUT) as resp:
             raw = resp.read(65536)
         body = json.loads(raw)
+        if isinstance(body, list):
+            body = next(
+                (item for item in body if isinstance(item, dict) and item.get("provider") == "claude"),
+                None,
+            )
         return body if isinstance(body, dict) else None
     except Exception as e:
         _dlog(f"codexbar: fetch failed: {e}")
@@ -661,6 +666,8 @@ def _normalize_codexbar_response(body: dict, now: float) -> Optional[dict]:
     claude = payload.get("claude")
     if isinstance(claude, dict):
         payload = claude
+    usage = payload.get("usage")
+    axes = usage if isinstance(usage, dict) else payload
 
     def _axis(section) -> tuple[Optional[int], Optional[float]]:
         if not isinstance(section, dict):
@@ -669,8 +676,8 @@ def _normalize_codexbar_response(body: dict, now: float) -> Optional[dict]:
         pct = min(100, max(0, round(pct))) if isinstance(pct, (int, float)) else None
         return pct, _parse_resets_at(section.get("resetsAt"))
 
-    five_pct, five_resets = _axis(payload.get("primary"))
-    week_pct, week_resets = _axis(payload.get("secondary"))
+    five_pct, five_resets = _axis(axes.get("primary"))
+    week_pct, week_resets = _axis(axes.get("secondary"))
     if five_pct is None and week_pct is None:
         return None
 
