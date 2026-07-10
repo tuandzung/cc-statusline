@@ -43,7 +43,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import NamedTuple, Optional
 
-__version__ = "1.2.4"
+__version__ = "1.2.5"
 
 # ── Catppuccin Macchiato palette (24-bit RGB) — only the colours we render ────
 _P: dict[str, tuple[int, int, int]] = {
@@ -601,7 +601,7 @@ _CODEXBAR_DEFAULT_PORT = 8080
 _CODEXBAR_SNAPSHOT = _CACHE_DIR / "codexbar_snapshot.json"
 _CODEXBAR_CACHE_TTL = 300  # 5 min — mirrors _OAUTH_CACHE_TTL
 _CODEXBAR_STALE_WINDOW = 1800  # 30 min — mirrors _OAUTH_STALE_WINDOW
-_CODEXBAR_TIMEOUT = 0.2  # 200ms — a hung local daemon must never lag a render
+_CODEXBAR_TIMEOUT = 30  # 30s
 
 def _codexbar_url() -> str:
     """Build codexbar's /usage URL from CC_CODEXBAR_HOST/PORT, falling back to
@@ -856,7 +856,9 @@ def _seg_quota(icon: str, body: Optional[str], resets_at, worst_pct: int) -> Seg
 def _seg_block5h_oauth(snapshot: dict) -> Segment:
     pct = _oauth_axis_pct(snapshot, "five_hour")
     resets = snapshot.get("axes", {}).get("five_hour", {}).get("resets_at")
-    return _seg_quota(ICON_BLOCK_LIVE, None if pct is None else f"{pct}%", resets, pct or 0)
+    return _seg_quota(
+        ICON_BLOCK_LIVE, None if pct is None else f"{pct}%", resets, pct or 0
+    )
 
 def _seg_weekly_oauth(snapshot: dict) -> Segment:
     s_pct = _oauth_axis_pct(snapshot, "seven_day_sonnet")
@@ -876,7 +878,10 @@ def _seg_block5h_codexbar(snapshot: dict) -> Segment:
     ax = snapshot.get("five_hour") or {}
     pct = ax.get("pct")
     return _seg_quota(
-        ICON_BLOCK_LIVE, None if pct is None else f"{pct}%", ax.get("resets_at"), pct or 0
+        ICON_BLOCK_LIVE,
+        None if pct is None else f"{pct}%",
+        ax.get("resets_at"),
+        pct or 0,
     )
 
 def _seg_weekly_codexbar(snapshot: dict) -> Segment:
@@ -888,7 +893,11 @@ def _seg_weekly_codexbar(snapshot: dict) -> Segment:
     if pct is None:
         return _seg_quota(ICON_WEEKLY, None, None, 0)
     will_last = ax.get("will_last_to_reset")
-    pace = "" if will_last is None else f" {ICON_PACE_OK if will_last else ICON_PACE_BEHIND}"
+    pace = (
+        ""
+        if will_last is None
+        else f" {ICON_PACE_OK if will_last else ICON_PACE_BEHIND}"
+    )
     return _seg_quota(ICON_WEEKLY, f"{pct}%{pace}", ax.get("resets_at"), pct)
 
 # ── Main ──────────────────────────────────────────────────────────────────────
