@@ -1,6 +1,6 @@
 # cc-statusline
 
-3-line Powerline statusline for [Claude Code](https://code.claude.com) — Catppuccin Macchiato palette, Nerd Font v3 icons, authoritative quota tracking via Anthropic's OAuth usage API with a local JSONL fallback.
+3-line Powerline statusline for [Claude Code](https://code.claude.com) — Catppuccin Macchiato palette, Nerd Font v3 icons, quota tracking via a local [CodexBar](https://github.com/steipete/CodexBar) daemon (with weekly Pace), Anthropic's OAuth usage API, or a local JSONL fallback.
 
 ![statusline preview](docs/preview.png)
 
@@ -14,9 +14,9 @@
 
 - **Line 1** — VIM mode (when enabled) · CWD · git branch/ahead/behind/dirty · session duration + lines changed
 - **Line 2** — model name · context window usage % with raw token counts
-- **Line 3** — 5h block % with time remaining · weekly Sonnet/All-model %. Reads Anthropic's authoritative `utilization` via `/api/oauth/usage` when Claude Code OAuth credentials are present; otherwise falls back to a local JSONL heuristic.
+- **Line 3** — 5h block % with time remaining · weekly %. Three sources, in priority order: a local `codexbar serve` daemon (only source with the weekly Pace indicator), Anthropic's authoritative `/api/oauth/usage` when Claude Code OAuth credentials are present, else a local JSONL heuristic.
 - **Zero runtime deps** — pure Python 3.10+ stdlib, no pip install required
-- **Per-file mtime cache** — JSONL re-parsed only when changed; aggregate refreshed every 30s. OAuth snapshots cached 5 minutes with a 15-minute 429 cooldown.
+- **Per-file mtime cache** — JSONL re-parsed only when changed; aggregate refreshed every 30s. codexbar/OAuth snapshots cached 5 minutes; OAuth adds a 15-minute 429 cooldown.
 - **6 plan tiers** (fallback path) — `free`, `pro`, `max_5x`, `max_20x`, `team_standard`, `team_premium`
 
 ## Install
@@ -69,11 +69,20 @@ export CC_PLAN_TIER=pro   # default; ignored when OAuth credentials are present
 
 Limits use the **conservative (`min`) side** of Anthropic's published ranges. Edit `config/limits.json` to adjust when Anthropic publishes precise numbers.
 
-Set `CC_STATUSLINE_DEBUG=1` to log which path is active and the last OAuth error (if any) to `~/.cache/cc-statusline/debug.log`.
+```sh
+export CC_CODEXBAR_HOST=127.0.0.1   # codexbar daemon host (bare host, no scheme)
+export CC_CODEXBAR_PORT=8080        # codexbar daemon port; invalid values fall back to 8080
+```
+
+Set `CC_STATUSLINE_DEBUG=1` to log which path is active and the last codexbar/OAuth error (if any) to `~/.cache/cc-statusline/debug.log`.
 
 ## How quota tracking works
 
-### OAuth path (preferred)
+### codexbar path (preferred)
+
+When a [CodexBar](https://github.com/steipete/CodexBar) `codexbar serve` daemon is reachable at `http://{CC_CODEXBAR_HOST}:{CC_CODEXBAR_PORT}/usage?provider=claude`, Line 3 renders its 5h and weekly percentages plus a weekly **Pace** icon ( on track /  won't last to reset) — the only source that carries Pace. cc-statusline is a pure client: it never spawns, health-checks, or restarts the daemon, and a 200ms timeout keeps a hung daemon from lagging renders. Any failure falls through to OAuth. See [ADR-0005](docs/adr/0005-codexbar-as-preferred-quota-source.md).
+
+### OAuth path
 
 When `~/.claude/.credentials.json` is present and its access token is unexpired, Line 3 fetches `GET https://api.anthropic.com/api/oauth/usage` and renders Anthropic's authoritative `utilization` for `five_hour`, `seven_day_sonnet` (Sonnet weekly), and `seven_day` (all-model weekly). The 5h segment uses the filled hourglass icon (`󰺉`) to mark the authoritative path.
 
@@ -83,7 +92,7 @@ When `~/.claude/.credentials.json` is present and its access token is unexpired,
 
 ### JSONL fallback path
 
-If no OAuth credentials are found or the endpoint is unreachable, Line 3 reads `~/.claude/projects/**/*.jsonl` directly — the original behaviour.
+If neither codexbar nor OAuth is available, Line 3 reads `~/.claude/projects/**/*.jsonl` directly — the original behaviour.
 
 - **5h block** — counts external user prompts (excluding slash-command outputs) inside a rolling 5-hour window anchored to your first prompt in that window.
 - **Weekly** — sums Sonnet/Opus model-hours (session wall-time × per-model response ratio) across a rolling 7-day window. Time remaining = next Monday 00:00 UTC.
@@ -112,7 +121,7 @@ Thresholds: `< 50%` green · `< 75%` yellow · `< 90%` peach · `≥ 90%` red.
 ## Development
 
 ```sh
-uv run pytest          # run all 78 tests
+uv run pytest          # run all 111 tests
 uv run pytest -v       # verbose
 ```
 

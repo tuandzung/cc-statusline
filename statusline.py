@@ -41,35 +41,22 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
+from typing import NamedTuple, Optional
 
-__version__ = "1.2.3"
+__version__ = "1.2.4"
 
-# ── Catppuccin Macchiato palette (24-bit RGB) ─────────────────────────────────
+# ── Catppuccin Macchiato palette (24-bit RGB) — only the colours we render ────
 _P: dict[str, tuple[int, int, int]] = {
-    "rosewater": (244, 219, 214),
-    "flamingo": (240, 198, 198),
-    "pink": (245, 189, 230),
     "mauve": (198, 160, 246),
     "red": (237, 135, 150),
-    "maroon": (238, 153, 160),
     "peach": (245, 169, 127),
     "yellow": (238, 212, 159),
     "green": (166, 218, 149),
     "teal": (139, 213, 202),
-    "sky": (145, 215, 227),
     "sapphire": (125, 196, 228),
     "blue": (138, 173, 244),
     "lavender": (183, 189, 248),
-    "text": (202, 211, 245),
-    "subtext1": (184, 192, 224),
-    "overlay2": (147, 154, 183),
-    "overlay1": (128, 135, 162),
     "surface2": (91, 96, 120),
-    "surface1": (73, 77, 100),
-    "surface0": (54, 58, 78),
-    "base": (36, 39, 58),
-    "mantle": (30, 32, 48),
     "crust": (24, 25, 38),
 }
 
@@ -94,13 +81,7 @@ ICON_PACE_BEHIND = "\uf071"  # nf-fa-exclamation_triangle — codexbar: won't la
 # Powerline right-filled separator (U+E0B0)
 _CHEV = ""
 
-# VIM mode → display letter and bg palette name
-_VIM_LETTER: dict[str, str] = {
-    "NORMAL": "N",
-    "INSERT": "I",
-    "VISUAL": "V",
-    "VISUAL LINE": "V",
-}
+# VIM mode → bg palette name (display letter is always mode[:1])
 _VIM_COLOR: dict[str, str] = {
     "NORMAL": "blue",
     "INSERT": "green",
@@ -131,15 +112,12 @@ def _pct_color(pct: float) -> str:
 
 # ── Powerline renderer ────────────────────────────────────────────────────────
 
-class Segment:
+class Segment(NamedTuple):
     """A single coloured Powerline chunk."""
 
-    __slots__ = ("content", "bg", "fg")
-
-    def __init__(self, content: str, bg: str, fg: str = "crust") -> None:
-        self.content = content  # icon + text, no surrounding spaces
-        self.bg = bg
-        self.fg = fg
+    content: str  # icon + text, no surrounding spaces
+    bg: str
+    fg: str = "crust"
 
 def render_line(segments: list[Segment]) -> str:
     """Join Segments with Powerline chevrons into a single ANSI string."""
@@ -215,10 +193,6 @@ def _git_info(cwd: str) -> Optional[dict]:
     if ab:
         ahead = int(ab.group(1) or 0)
         behind = int(ab.group(2) or 0)
-    else:
-        only_behind = re.search(r"\[behind (\d+)\]", header)
-        if only_behind:
-            behind = int(only_behind.group(1))
 
     branch = re.split(r"\.\.\.|\s+\[", header)[0].strip()
     if branch.startswith("No commits yet on "):
@@ -243,9 +217,6 @@ _AGG_TTL = 30  # seconds between full re-scans
 # handles parent-mkdir, JSON parse, atomic write, and silent failure.
 
 def _cache_load(path: Path) -> Optional[dict]:
-    if not path.is_relative_to(_CACHE_DIR):
-        _dlog(f"cache: refusing load outside _CACHE_DIR: {path}")
-        return None
     try:
         return json.loads(path.read_text())
     except Exception as e:
@@ -253,9 +224,6 @@ def _cache_load(path: Path) -> Optional[dict]:
         return None
 
 def _cache_save(path: Path, data: dict) -> None:
-    if not path.is_relative_to(_CACHE_DIR):
-        _dlog(f"cache: refusing save outside _CACHE_DIR: {path}")
-        return
     tmp = path.parent / f".{path.name}.tmp.{os.getpid()}"
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -272,7 +240,8 @@ def _session_cache_path(jsonl: Path) -> Path:
     h = hashlib.md5(str(jsonl).encode(), usedforsecurity=False).hexdigest()
     return _SES_DIR / f"{h}.json"
 
-def _parse_ts(ts: str) -> Optional[float]:
+def _parse_ts(ts) -> Optional[float]:
+    """ISO-8601 string (Z ok) to unix seconds; None on anything else."""
     try:
         return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
     except Exception:
@@ -528,14 +497,6 @@ def _fetch_oauth_usage(access_token: str) -> tuple[str, Optional[dict]]:
     except Exception:
         return "network_error", None
 
-def _parse_resets_at(value) -> Optional[float]:
-    if not isinstance(value, str) or not value:
-        return None
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
-    except Exception:
-        return None
-
 def _normalize_oauth_response(body: dict, now: float) -> Optional[dict]:
     """Pick the axes we render, drop disabled/null/unknown ones."""
     axes: dict[str, dict] = {}
@@ -550,7 +511,7 @@ def _normalize_oauth_response(body: dict, now: float) -> Optional[dict]:
             continue
         axes[key] = {
             "utilization": float(util),
-            "resets_at": _parse_resets_at(entry.get("resets_at")),
+            "resets_at": _parse_ts(entry.get("resets_at")),
         }
     if not axes:
         return None
@@ -696,7 +657,7 @@ def _normalize_codexbar_response(body: dict, now: float) -> Optional[dict]:
             return None, None
         pct = section.get("usedPercent")
         pct = min(100, max(0, round(pct))) if isinstance(pct, (int, float)) else None
-        return pct, _parse_resets_at(section.get("resetsAt"))
+        return pct, _parse_ts(section.get("resetsAt"))
 
     five_pct, five_resets = _axis(axes.get("primary"))
     week_pct, week_resets = _axis(axes.get("secondary"))
@@ -761,49 +722,21 @@ def _get_codexbar_stats() -> Optional[dict]:
 
 # ── Tier limits ───────────────────────────────────────────────────────────────
 
-_EMBEDDED_LIMITS: dict[str, dict] = {
-    "free": {
-        "5h_cycle": {"min": 10, "max": 40},
-        "weekly_sonnet": {"min": 40, "max": 80},
-    },
-    "pro": {
-        "5h_cycle": {"min": 10, "max": 40},
-        "weekly_sonnet": {"min": 40, "max": 80},
-    },
-    "max_5x": {
-        "5h_cycle": {"min": 50, "max": 200},
-        "weekly_sonnet": {"min": 140, "max": 280},
-        "weekly_opus": {"min": 15, "max": 35},
-    },
-    "max_20x": {
-        "5h_cycle": {"min": 200, "max": 800},
-        "weekly_sonnet": {"min": 240, "max": 480},
-        "weekly_opus": {"min": 24, "max": 40},
-    },
-    "team_standard": {
-        "5h_cycle": {"min": 13, "max": 50},
-        "weekly_sonnet": {"min": 50, "max": 100},
-    },
-    "team_premium": {
-        "5h_cycle": {"min": 63, "max": 250},
-        "weekly_sonnet": {"min": 250, "max": 500},
-        "weekly_opus": {"min": 19, "max": 44},
-    },
-}
+# config/limits.json (ADR-0002: the single edit point) ships next to this
+# script; the inline dict is only the last-resort default when it's unreadable.
+_PRO_LIMITS: dict = {"5h_cycle": {"min": 10}, "weekly_sonnet": {"min": 40}}
 
 def _tier_limits() -> dict:
     tier = os.environ.get("CC_PLAN_TIER", "pro").lower().strip()
-    # Try loading from config/limits.json relative to plugin root or script dir
     script_dir = Path(__file__).parent
     plugin_root = Path(os.environ.get("CLAUDE_PLUGIN_ROOT", str(script_dir)))
     for base in (plugin_root, script_dir):
         p = base / "config" / "limits.json"
-        if p.exists():
-            try:
-                return json.loads(p.read_text()).get(tier, _EMBEDDED_LIMITS["pro"])
-            except Exception:
-                break
-    return _EMBEDDED_LIMITS.get(tier, _EMBEDDED_LIMITS["pro"])
+        try:
+            return json.loads(p.read_text()).get(tier) or _PRO_LIMITS
+        except Exception:
+            continue
+    return _PRO_LIMITS
 
 # ── Segment builders ──────────────────────────────────────────────────────────
 
@@ -812,7 +745,7 @@ def _seg_vim(data: dict) -> Optional[Segment]:
     if not vim:
         return None
     mode = vim.get("mode", "NORMAL")
-    letter = _VIM_LETTER.get(mode, mode[:1])
+    letter = mode[:1]
     color = _VIM_COLOR.get(mode, "blue")
     return Segment(f"{ICON_VIM} {letter}", color)
 
@@ -910,50 +843,40 @@ def _oauth_axis_pct(snapshot: dict, key: str) -> Optional[int]:
         util *= 100
     return min(100, max(0, round(util)))
 
+def _seg_quota(icon: str, body: Optional[str], resets_at, worst_pct: int) -> Segment:
+    """Shared renderer for OAuth/codexbar quota segments: `icon body (remain)`
+    coloured by worst_pct, or `icon —` on surface2 when body is None."""
+    if body is None:
+        return Segment(f"{icon} —", "surface2")
+    remain = (
+        max(0.0, resets_at - time.time()) if isinstance(resets_at, (int, float)) else 0
+    )
+    return Segment(f"{icon} {body} ({_fmt_duration(remain)})", _pct_color(worst_pct))
+
 def _seg_block5h_oauth(snapshot: dict) -> Segment:
     pct = _oauth_axis_pct(snapshot, "five_hour")
-    if pct is None:
-        return Segment(f"{ICON_BLOCK_LIVE} —", "surface2")
     resets = snapshot.get("axes", {}).get("five_hour", {}).get("resets_at")
-    remain = max(0.0, resets - time.time()) if isinstance(resets, (int, float)) else 0
-    return Segment(
-        f"{ICON_BLOCK_LIVE} {pct}% ({_fmt_duration(remain)})",
-        _pct_color(pct),
-    )
+    return _seg_quota(ICON_BLOCK_LIVE, None if pct is None else f"{pct}%", resets, pct or 0)
 
 def _seg_weekly_oauth(snapshot: dict) -> Segment:
     s_pct = _oauth_axis_pct(snapshot, "seven_day_sonnet")
     a_pct = _oauth_axis_pct(snapshot, "seven_day")
     if s_pct is None and a_pct is None:
-        return Segment(f"{ICON_WEEKLY} —", "surface2")
-
+        return _seg_quota(ICON_WEEKLY, None, None, 0)
     # Anchor "time remaining" to seven_day (all-model), falling back to sonnet.
     axes = snapshot.get("axes", {})
     resets = axes.get("seven_day", {}).get("resets_at") or axes.get(
         "seven_day_sonnet", {}
     ).get("resets_at")
-    remain = max(0.0, resets - time.time()) if isinstance(resets, (int, float)) else 0
-
-    parts = []
-    if s_pct is not None:
-        parts.append(f"{s_pct}% S")
-    if a_pct is not None:
-        parts.append(f"{a_pct}% A")
-    text = f"{ICON_WEEKLY} {'  '.join(parts)} ({_fmt_duration(remain)})"
-
+    parts = [f"{p}% {t}" for p, t in ((s_pct, "S"), (a_pct, "A")) if p is not None]
     worst = max(p for p in (s_pct, a_pct) if p is not None)
-    return Segment(text, _pct_color(worst))
+    return _seg_quota(ICON_WEEKLY, "  ".join(parts), resets, worst)
 
 def _seg_block5h_codexbar(snapshot: dict) -> Segment:
     ax = snapshot.get("five_hour") or {}
     pct = ax.get("pct")
-    if pct is None:
-        return Segment(f"{ICON_BLOCK_LIVE} —", "surface2")
-    resets = ax.get("resets_at")
-    remain = max(0.0, resets - time.time()) if isinstance(resets, (int, float)) else 0
-    return Segment(
-        f"{ICON_BLOCK_LIVE} {pct}% ({_fmt_duration(remain)})",
-        _pct_color(pct),
+    return _seg_quota(
+        ICON_BLOCK_LIVE, None if pct is None else f"{pct}%", ax.get("resets_at"), pct or 0
     )
 
 def _seg_weekly_codexbar(snapshot: dict) -> Segment:
@@ -963,19 +886,10 @@ def _seg_weekly_codexbar(snapshot: dict) -> Segment:
     ax = snapshot.get("weekly") or {}
     pct = ax.get("pct")
     if pct is None:
-        return Segment(f"{ICON_WEEKLY} —", "surface2")
-    resets = ax.get("resets_at")
-    remain = max(0.0, resets - time.time()) if isinstance(resets, (int, float)) else 0
-
+        return _seg_quota(ICON_WEEKLY, None, None, 0)
     will_last = ax.get("will_last_to_reset")
-    pace_icon = ""
-    if will_last is True:
-        pace_icon = f" {ICON_PACE_OK}"
-    elif will_last is False:
-        pace_icon = f" {ICON_PACE_BEHIND}"
-
-    text = f"{ICON_WEEKLY} {pct}%{pace_icon} ({_fmt_duration(remain)})"
-    return Segment(text, _pct_color(pct))
+    pace = "" if will_last is None else f" {ICON_PACE_OK if will_last else ICON_PACE_BEHIND}"
+    return _seg_quota(ICON_WEEKLY, f"{pct}%{pace}", ax.get("resets_at"), pct)
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 

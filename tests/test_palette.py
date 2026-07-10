@@ -41,7 +41,7 @@ def test_bg_produces_48_escape():
 def test_palette_has_required_colours():
     required = {
         "crust", "blue", "mauve", "teal", "sapphire", "green",
-        "yellow", "peach", "red", "surface2", "surface0",
+        "yellow", "peach", "red", "surface2", "lavender",
     }
     assert required.issubset(_P.keys())
 
